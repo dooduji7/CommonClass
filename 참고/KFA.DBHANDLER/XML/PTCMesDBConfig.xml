@@ -1,0 +1,115 @@
+<?xml version="1.0" standalone="yes"?>
+<NewDataSet>
+  <xs:schema id="NewDataSet" xmlns="" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xs:element name="NewDataSet" msdata:IsDataSet="true" msdata:UseCurrentLocale="true">
+      <xs:complexType>
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+          <xs:element name="PTCMES">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="DB" type="xs:string" minOccurs="0" />
+                <xs:element name="SID" type="xs:string" minOccurs="0" />
+                <xs:element name="ID" type="xs:string" minOccurs="0" />
+                <xs:element name="PWD" type="xs:string" minOccurs="0" />
+                <xs:element name="LIFETIME" type="xs:int" minOccurs="0" />
+                <xs:element name="MAXPOOLSIZE" type="xs:int" minOccurs="0" />
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="PTCDEV">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="DB" type="xs:string" minOccurs="0" />
+                <xs:element name="SID" type="xs:string" minOccurs="0" />
+                <xs:element name="ID" type="xs:string" minOccurs="0" />
+                <xs:element name="PWD" type="xs:string" minOccurs="0" />
+                <xs:element name="LIFETIME" type="xs:int" minOccurs="0" />
+                <xs:element name="MAXPOOLSIZE" type="xs:int" minOccurs="0" />
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="PTCSPC">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="DB" type="xs:string" minOccurs="0" />
+                <xs:element name="SID" type="xs:string" minOccurs="0" />
+                <xs:element name="ID" type="xs:string" minOccurs="0" />
+                <xs:element name="PWD" type="xs:string" minOccurs="0" />
+                <xs:element name="LIFETIME" type="xs:int" minOccurs="0" />
+                <xs:element name="MAXPOOLSIZE" type="xs:int" minOccurs="0" />
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+          <xs:element name="MSSQL">
+            <xs:complexType>
+              <xs:sequence>
+                <xs:element name="IP" type="xs:string" minOccurs="0" />
+                <xs:element name="ID" type="xs:string" minOccurs="0" />
+                <xs:element name="PWD" type="xs:string" minOccurs="0" />
+                <xs:element name="DSN" type="xs:string" minOccurs="0" />
+              </xs:sequence>
+            </xs:complexType>
+          </xs:element>
+        </xs:choice>
+      </xs:complexType>
+    </xs:element>
+  </xs:schema>
+  <PTCMES>
+    <DB>PTCMES</DB>
+    <SID>PTCMES</SID>
+    <ID>MESPTC</ID>
+    <PWD>MESPTC</PWD>
+    <LIFETIME>300</LIFETIME>
+    <MAXPOOLSIZE>3</MAXPOOLSIZE>
+  </PTCMES>
+  <PTCMES>
+    <DB>PTCQC</DB>
+    <SID>PTCMES</SID>
+    <ID>PLC</ID>
+    <PWD>PLC</PWD>
+    <LIFETIME>300</LIFETIME>
+    <MAXPOOLSIZE>3</MAXPOOLSIZE>
+  </PTCMES>
+  
+  <PTCDEV>
+    <DB>PTCMES</DB>
+    <SID>PTCMES_JH</SID>
+    <ID>MESPTC</ID>
+    <PWD>MESPTC</PWD>
+    <LIFETIME>300</LIFETIME>
+    <MAXPOOLSIZE>3</MAXPOOLSIZE>
+  </PTCDEV>
+  <PTCDEV>
+    <DB>PTCQC</DB>
+    <SID>PTCMES</SID>
+    <ID>PLC</ID>
+    <PWD>PLC</PWD>
+    <LIFETIME>300</LIFETIME>
+    <MAXPOOLSIZE>3</MAXPOOLSIZE>
+  </PTCDEV>
+    
+  <PTCSPC>
+    <DB>PTCMES</DB>
+    <SID>PTCMES</SID>
+    <ID>MESPTC</ID>
+    <PWD>MESPTC</PWD>
+    <LIFETIME>300</LIFETIME>
+    <MAXPOOLSIZE>3</MAXPOOLSIZE>
+  </PTCSPC>
+  <PTCSPC>
+    <DB>PTCQC</DB>
+    <SID>PTCMES</SID>
+    <ID>PLC</ID>
+    <PWD>PLC</PWD>
+    <LIFETIME>300</LIFETIME>
+    <MAXPOOLSIZE>3</MAXPOOLSIZE>
+  </PTCSPC>
+  <MSSQL>
+    <IP>169.254.126.124</IP>
+    <ID>sa</ID>
+    <PWD>p@ssw0rd</PWD>
+    <DSN>HLMESDB </DSN>
+  </MSSQL>
+  
+  
+</NewDataSet>
