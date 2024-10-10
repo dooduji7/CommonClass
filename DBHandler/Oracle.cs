@@ -4,8 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Data;
-using System.Data.OracleClient;
-
+using Oracle.ManagedDataAccess.Client;
 namespace DBHandler
 {
     #region[OracleDbAccess]
@@ -154,7 +153,7 @@ namespace DBHandler
                         Params[i].Direction = ParameterDirection.Input;
                     }
 
-                    Params[i] = new OracleParameter("P_CURSOR", OracleType.Cursor);
+                    Params[i] = new OracleParameter("P_CURSOR", OracleDbType.RefCursor);
                     Params[i].Direction = ParameterDirection.Output;
 
                     return OracleDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
@@ -162,7 +161,7 @@ namespace DBHandler
                 else
                 {
                     OracleParameter[] Params = new OracleParameter[1];
-                    Params[0] = new OracleParameter("P_CURSOR", OracleType.Cursor);
+                    Params[0] = new OracleParameter("P_CURSOR", OracleDbType.RefCursor);
                     Params[0].Direction = ParameterDirection.Output;
                     return OracleDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
                 }
@@ -198,7 +197,7 @@ namespace DBHandler
                         Params[i].Direction = ParameterDirection.Input;
                     }
 
-                    Params[i] = new OracleParameter("P_CURSOR", OracleType.Cursor);
+                    Params[i] = new OracleParameter("P_CURSOR", OracleDbType.RefCursor);
                     Params[i].Direction = ParameterDirection.Output;
 
                     return OracleDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
@@ -206,7 +205,7 @@ namespace DBHandler
                 else
                 {
                     OracleParameter[] Params = new OracleParameter[1];
-                    Params[0] = new OracleParameter("P_CURSOR", OracleType.Cursor);
+                    Params[0] = new OracleParameter("P_CURSOR", OracleDbType.RefCursor);
                     Params[0].Direction = ParameterDirection.Output;
                     return OracleDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
                 }
@@ -997,7 +996,7 @@ namespace DBHandler
                 {
                     for (int iElemCnt = 0; iElemCnt < cmd.Parameters.Count; iElemCnt++)
                     {
-                        oBuilder.Replace(cmd.Parameters[iElemCnt].ParameterName, SqlParameterValue2String(cmd.Parameters[iElemCnt].OracleType, cmd.Parameters[iElemCnt].Value));
+                        oBuilder.Replace(cmd.Parameters[iElemCnt].ParameterName, SqlParameterValue2String(cmd.Parameters[iElemCnt].OracleDbType, cmd.Parameters[iElemCnt].Value));
                     }
                 }
                 else
@@ -1007,7 +1006,7 @@ namespace DBHandler
                         oBuilder.Append("\r\n");
                         oBuilder.Append(cmd.Parameters[iElemCnt].ParameterName);
                         oBuilder.Append(" = ");
-                        oBuilder.Append(SqlParameterValue2String(cmd.Parameters[iElemCnt].OracleType, cmd.Parameters[iElemCnt].Value));
+                        oBuilder.Append(SqlParameterValue2String(cmd.Parameters[iElemCnt].OracleDbType, cmd.Parameters[iElemCnt].Value));
                     }
                 }
 
@@ -1033,7 +1032,7 @@ namespace DBHandler
         #endregion
 
         #region ==== SqlParameterValue2String ====
-        private static string SqlParameterValue2String(OracleType tp, object parameterValue)
+        private static string SqlParameterValue2String(OracleDbType tp, object parameterValue)
         {
             string strReturn = "NULL";
 
@@ -1045,30 +1044,30 @@ namespace DBHandler
                 {
                     switch (tp)
                     {
-                        case OracleType.Char:
-                        case OracleType.VarChar:
-                        case OracleType.NChar:
+                        case OracleDbType.Char:
+                        case OracleDbType.Varchar2:
+                        case OracleDbType.NChar:
                             strReturn = string.Concat("'", (string)parameterValue, "'");
                             break;
-                        case OracleType.BFile:
+                        case OracleDbType.BFile:
                             strReturn = "<OracleBFile>";
                             break;
-                        case OracleType.Blob:
+                        case OracleDbType.Blob:
                             strReturn = "<OracleBlob>";
                             break;
-                        case OracleType.Clob:
+                        case OracleDbType.Clob:
                             strReturn = "<CLOB>";
                             break;
-                        case OracleType.DateTime:
+                        case OracleDbType.Date:
                             strReturn = "<OracleDate>";
                             break;
-                        case OracleType.Raw:
+                        case OracleDbType.Raw:
                             strReturn = "<OracleBinary>";
                             break;
-                        case OracleType.LongRaw:
+                        case OracleDbType.LongRaw:
                             strReturn = "<OracleBinary>";
                             break;
-                        case OracleType.Byte:
+                        case OracleDbType.Byte:
                             strReturn = "<Binary>";
                             break;
                         //						case OracleType.Cursor:

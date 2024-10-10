@@ -4,8 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Data.SqlClient;
-using System.Data.OracleClient;
 using System.Data;
+using Oracle.ManagedDataAccess.Client;
 
 namespace DBHandler
 {
@@ -226,7 +226,7 @@ namespace DBHandler
                         Params[i].Direction = ParameterDirection.Input;
                     }
 
-                    Params[i] = new SqlParameter(strParamID[i], OracleType.Cursor);
+                    Params[i] = new SqlParameter(strParamID[i], OracleDbType.RefCursor);
                     Params[i].Direction = ParameterDirection.Output;
 
                     //return MSSQLDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
@@ -236,7 +236,7 @@ namespace DBHandler
                 else
                 {
                     SqlParameter[] Params = new SqlParameter[1];
-                    Params[0] = new SqlParameter(strParamID[i], OracleType.Cursor);
+                    Params[0] = new SqlParameter(strParamID[i], OracleDbType.RefCursor);
                     Params[0].Direction = ParameterDirection.Output;
                     // return MSSQLDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
                     MSSQLDbAccess.ExecuteScalar(strSpName, Params, CommandType.StoredProcedure);

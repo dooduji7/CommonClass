@@ -29,11 +29,13 @@
         private void InitializeComponent()
         {
             this.btnTest = new System.Windows.Forms.Button();
+            this.button1 = new System.Windows.Forms.Button();
+            this.btnLog = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // btnTest
             // 
-            this.btnTest.Location = new System.Drawing.Point(34, 22);
+            this.btnTest.Location = new System.Drawing.Point(12, 12);
             this.btnTest.Name = "btnTest";
             this.btnTest.Size = new System.Drawing.Size(75, 23);
             this.btnTest.TabIndex = 0;
@@ -41,14 +43,36 @@
             this.btnTest.UseVisualStyleBackColor = true;
             this.btnTest.Click += new System.EventHandler(this.btnTest_Click);
             // 
+            // button1
+            // 
+            this.button1.Location = new System.Drawing.Point(12, 109);
+            this.button1.Name = "button1";
+            this.button1.Size = new System.Drawing.Size(75, 23);
+            this.button1.TabIndex = 0;
+            this.button1.Text = "Test";
+            this.button1.UseVisualStyleBackColor = true;
+            this.button1.Click += new System.EventHandler(this.btnTest_Click);
+            // 
+            // btnLog
+            // 
+            this.btnLog.Location = new System.Drawing.Point(12, 203);
+            this.btnLog.Name = "btnLog";
+            this.btnLog.Size = new System.Drawing.Size(75, 23);
+            this.btnLog.TabIndex = 0;
+            this.btnLog.Text = "LogTest";
+            this.btnLog.UseVisualStyleBackColor = true;
+            this.btnLog.Click += new System.EventHandler(this.btnLog_Click);
+            // 
             // FrmMain
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(800, 450);
+            this.Controls.Add(this.btnLog);
+            this.Controls.Add(this.button1);
             this.Controls.Add(this.btnTest);
             this.Name = "FrmMain";
-            this.Text = "Form1";
+            this.Text = "TestForm";
             this.ResumeLayout(false);
 
         }
@@ -56,6 +80,8 @@
         #endregion
 
         private System.Windows.Forms.Button btnTest;
+        private System.Windows.Forms.Button button1;
+        private System.Windows.Forms.Button btnLog;
     }
 }
 

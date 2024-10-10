@@ -9,15 +9,17 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using DBHandler;
-
+using LogHandler;
 
 namespace CommonClass
 {
     public partial class FrmMain : Form
     {
+
         public FrmMain()
         {
             InitializeComponent();
+            Log.Init(Application.StartupPath + "\\TestLog", "MAIN", true, 30);
         }
 
         private void btnTest_Click(object sender, EventArgs e)
@@ -28,6 +30,9 @@ namespace CommonClass
             string m_strDB = string.Empty;
 
             MSSQLDbAccess.ConnectionString(m_strIP, m_strID, m_strPW,m_strDB);
+
+            bool bConnect = DBConnectState();
+
 
         }
 
@@ -54,6 +59,10 @@ namespace CommonClass
             return bFlag;
         }
 
-
+        private void btnLog_Click(object sender, EventArgs e)
+        {
+            Log.Instance().EnqueueLog(LogType.Error.ToString(), MethodBase.GetCurrentMethod().Name,
+                           (new System.Diagnostics.StackFrame(0, true)).GetFileLineNumber(), new string[] {"TEST Message" });
+        }
     }
 }

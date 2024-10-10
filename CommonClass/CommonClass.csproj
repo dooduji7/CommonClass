@@ -67,6 +67,7 @@
       <DependentUpon>Resources.resx</DependentUpon>
       <DesignTime>True</DesignTime>
     </Compile>
+    <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -84,6 +85,14 @@
     <ProjectReference Include="..\DBHandler\DBHandler.csproj">
       <Project>{6cd665d7-a34a-44cb-8379-6362b5d1c59b}</Project>
       <Name>DBHandler</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\LogHandler\LogHandler.csproj">
+      <Project>{860e802c-eafb-4081-9efc-6be6697c055f}</Project>
+      <Name>LogHandler</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\SerialSetting\SerialHandler.csproj">
+      <Project>{b6078665-6fee-42ee-91fd-21b5f45e0396}</Project>
+      <Name>SerialHandler</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
