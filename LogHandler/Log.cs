@@ -80,15 +80,15 @@ namespace LogHandler
         /// <summary>
         /// Log Struct
         /// </summary>
-        private struct STUC_LOG
+        private struct LogEntry
         {
-            public string strID;
-            public string[] arrLog;
-            public DateTime datLog;
-            public clsSourceInfo stucSorceInfo;
-            public int iLineNum;
-            public string strLogType;
-            public string strFunName;
+            public string Id;
+            public string[] Messages;
+            public DateTime Timestamp;
+            public clsSourceInfo SourceInfo;
+            public int LineNumber;
+            public string LogType;
+            public string FunctionName;
         }
 
         public int MaxLogDays
@@ -310,14 +310,14 @@ namespace LogHandler
             {
                 lock (m_objQueueLock)
                 {
-                    STUC_LOG data = new STUC_LOG();
-                    data.arrLog = arrDatas;
-                    data.datLog = DateTime.Now;
-                    data.strID = "";
-                    data.stucSorceInfo = GetSourceInfo();
-                    data.iLineNum = iLineNum;
-                    data.strLogType = strLogType;
-                    data.strFunName = strFunName;
+                    LogEntry data = new LogEntry();
+                    data.Messages = arrDatas;
+                    data.Timestamp = DateTime.Now;
+                    data.Id = "";
+                    data.SourceInfo = GetSourceInfo();
+                    data.LineNumber = iLineNum;
+                    data.LogType = strLogType;
+                    data.FunctionName = strFunName;
                     m_queLog.Enqueue(data);
                     m_avtLogEvent.Set();
                 }
@@ -338,11 +338,11 @@ namespace LogHandler
             {
                 lock (m_objQueueLock)
                 {
-                    STUC_LOG data = new STUC_LOG();
-                    data.arrLog = arrDatas;
-                    data.datLog = DateTime.Now;
-                    data.strID = strID;
-                    data.stucSorceInfo = GetSourceInfo();
+                    LogEntry data = new LogEntry();
+                    data.Messages = arrDatas;
+                    data.Timestamp = DateTime.Now;
+                    data.Id = strID;
+                    data.SourceInfo = GetSourceInfo();
                     m_queLog.Enqueue(data);
                     m_avtLogEvent.Set();
                 }
@@ -363,83 +363,31 @@ namespace LogHandler
                 {
                     try
                     {
-                        while (m_queLog.Count != 0)
+                        while (true)
                         {
+                            LogEntry objData;
+
+                            lock (m_objQueueLock)
+                            {
+                                if (m_queLog.Count == 0)
+                                {
+                                    break;
+                                }
+
+                                objData = (LogEntry)m_queLog.Dequeue();
+                            }
+
                             try
                             {
-                                STUC_LOG objData;
-
-                                lock (m_objQueueLock)
-                                {
-                                    objData = (STUC_LOG)m_queLog.Peek();
-                                }
-
-                                string path = "";
-
-                                if (!Directory.Exists(m_strPath))
-                                {
-                                    Directory.CreateDirectory(m_strPath);
-                                }
-
-                                if (objData.strID.Length == 0)
-                                {
-                                    path = string.Format(
-                                        "{0}\\{1}_{2}",
-                                        m_strPath,
-                                        m_strFile,
-                                        DateTime.Now.ToString("yyyyMMddHH") + ".log");
-                                }
-                                else
-                                {
-                                    path = string.Format(
-                                        "{0}\\{1}_{2}",
-                                        m_strPath,
-                                        objData.strID,
-                                        DateTime.Now.ToString("yyyyMMddHH") + ".log");
-                                }
-
-                                string strData = string.Empty;
-
-                                strData += objData.datLog.ToString("HH:mm:ss:ff");
-
-                                if (m_bSourceInfo)
-                                {
-                                    strData += " | "
-                                        + objData.stucSorceInfo.File
-                                        + " | "
-                                        + objData.strFunName
-                                        + "("
-                                        + objData.iLineNum
-                                        + ") ";
-                                }
-
-                                for (int i = 0; i < objData.arrLog.Length; i++)
-                                {
-                                    strData += " | " + objData.arrLog[i];
-                                }
-
-                                lock (m_objFileLock)
-                                {
-                                    using (StreamWriter pFileWriter = File.AppendText(path))
-                                    {
-                                        pFileWriter.WriteLine(strData);
-                                    }
-                                }
-
-                                lock (m_objQueueLock)
-                                {
-                                    m_queLog.Dequeue();
-                                }
+                                WriteLog(objData);
                             }
-                            catch (Exception e)
+                            catch (Exception ex)
                             {
                                 System.Diagnostics.Debug.WriteLine(
-                                    "Log " + e.Message);
+                                    "Log Write Error : " + ex.Message);
                             }
                         }
 
-                        // Dispose 요청 이후에도 Queue에 남은 로그를
-                        // 모두 처리한 뒤 종료
                         if (m_bCloseHandler)
                         {
                             break;
@@ -452,20 +400,79 @@ namespace LogHandler
                     catch (Exception ex)
                     {
                         System.Diagnostics.Debug.WriteLine(
-                            "Log " + ex.Message);
+                            "Log Process Error : " + ex.Message);
                     }
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine(
-                    "Log " + ex.Message);
+                    "Log Thread Error : " + ex.Message);
             }
 
             System.Diagnostics.Debug.WriteLine(
                 "LogWriteProcess exit!!");
         }
         #endregion
+
+        private void WriteLog(LogEntry objData)
+        {
+            string path = "";
+
+            if (!Directory.Exists(m_strPath))
+            {
+                Directory.CreateDirectory(m_strPath);
+            }
+
+            if (objData.Id.Length == 0)
+            {
+                path = string.Format(
+                    "{0}\\{1}_{2}",
+                    m_strPath,
+                    m_strFile,
+                    DateTime.Now.ToString("yyyyMMddHH") + ".log");
+            }
+            else
+            {
+                path = string.Format(
+                    "{0}\\{1}_{2}",
+                    m_strPath,
+                    objData.Id,
+                    DateTime.Now.ToString("yyyyMMddHH") + ".log");
+            }
+
+            StringBuilder builder = new StringBuilder();
+
+            builder.Append(
+                objData.Timestamp.ToString("HH:mm:ss:ff"));
+
+            if (m_bSourceInfo)
+            {
+                builder.Append(" | ");
+                builder.Append(objData.SourceInfo.File);
+                builder.Append(" | ");
+                builder.Append(objData.FunctionName);
+                builder.Append("(");
+                builder.Append(objData.LineNumber);
+                builder.Append(") ");
+            }
+
+            for (int i = 0; i < objData.Messages.Length; i++)
+            {
+                builder.Append(" | ");
+                builder.Append(objData.Messages[i]);
+            }
+
+            string strData = builder.ToString();
+
+            lock (m_objFileLock)
+            {
+                using (StreamWriter pFileWriter = File.AppendText(path))
+                {
+                    pFileWriter.WriteLine(strData);
+                }
+            }
+        }
 
         #region[로그 삭제]
         private void DeleteLog()
