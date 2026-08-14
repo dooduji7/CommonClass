@@ -16,8 +16,6 @@ namespace SocketClient
         private string m_strErrMessage;
         private string m_strIP;
         private int m_nReceiveTimeout = 3000;
-        private bool m_bReceiveTimedOut = false;
-        private bool m_bConnectionClosed = false;
         private ReceiveState m_receiveState = ReceiveState.None;
 
         public enum ReceiveState
@@ -108,12 +106,9 @@ namespace SocketClient
         {
             this.m_Client = null;
             this.m_Stream = null;
-            this.m_strIP = string.Empty;
-            this.m_nPort = 0;
-            this.m_strErrMessage = string.Empty;
             this.m_strIP = p_strIp;
             this.m_nPort = p_nPort;
-            this.m_Client = new TcpClient();
+            this.m_strErrMessage = string.Empty;
         }
 
         public void Disposed()

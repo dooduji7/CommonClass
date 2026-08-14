@@ -1,15 +1,17 @@
-﻿using System;
+﻿using DBHandler;
+using LogHandler;
+using SocketClient;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using DBHandler;
-using LogHandler;
 
 namespace CommonClass
 {
@@ -63,6 +65,52 @@ namespace CommonClass
         {
             Log.Instance().EnqueueLog(LogType.Error.ToString(), MethodBase.GetCurrentMethod().Name,
                            (new System.Diagnostics.StackFrame(0, true)).GetFileLineNumber(), new string[] {"TEST Message" });
+        }
+
+        private void btnSocketTest_Click(object sender, EventArgs e)
+        {
+            clsSocketClient socket = new clsSocketClient("127.0.0.1", 9100);
+
+            bool result = socket.SocketConnect();
+
+            Debug.WriteLine(result);
+            Debug.WriteLine(socket.IsConnected);
+            Debug.WriteLine(socket.ERROR_MESSAGE);
+        }
+
+        private void btnSocket2_Click(object sender, EventArgs e)
+        {
+            clsSocketClient socket = new clsSocketClient("127.0.0.1", 9100);
+
+            socket.Dispose();
+
+            bool result = socket.SocketConnect();
+
+            Debug.WriteLine(result);
+            Debug.WriteLine(socket.IsConnected);
+            Debug.WriteLine(socket.ERROR_MESSAGE);
+        }
+
+        private void btnSockset3_Click(object sender, EventArgs e)
+        {
+            clsSocketClient socket = new clsSocketClient("127.0.0.1", 9100);
+
+            byte[] data = socket.ReceiveData(100);
+
+            Console.WriteLine(data == null);
+            Console.WriteLine(socket.LastReceiveState);
+            Console.WriteLine(socket.ERROR_MESSAGE);
+        }
+
+        private void btnSockset4_Click(object sender, EventArgs e)
+        {
+            clsSocketClient socket = new clsSocketClient("127.0.0.1", 9100);
+
+            byte[] data = socket.ReceiveData(0);
+
+            Console.WriteLine(data == null);
+            Console.WriteLine(socket.LastReceiveState);
+            Console.WriteLine(socket.ERROR_MESSAGE);
         }
     }
 }

@@ -31,13 +31,18 @@
             this.btnTest = new System.Windows.Forms.Button();
             this.button1 = new System.Windows.Forms.Button();
             this.btnLog = new System.Windows.Forms.Button();
+            this.btnSocketTest = new System.Windows.Forms.Button();
+            this.btnSocket2 = new System.Windows.Forms.Button();
+            this.btnSockset3 = new System.Windows.Forms.Button();
+            this.btnSockset4 = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // btnTest
             // 
-            this.btnTest.Location = new System.Drawing.Point(12, 12);
+            this.btnTest.Location = new System.Drawing.Point(14, 15);
+            this.btnTest.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnTest.Name = "btnTest";
-            this.btnTest.Size = new System.Drawing.Size(75, 23);
+            this.btnTest.Size = new System.Drawing.Size(86, 29);
             this.btnTest.TabIndex = 0;
             this.btnTest.Text = "Test";
             this.btnTest.UseVisualStyleBackColor = true;
@@ -45,9 +50,10 @@
             // 
             // button1
             // 
-            this.button1.Location = new System.Drawing.Point(12, 109);
+            this.button1.Location = new System.Drawing.Point(14, 136);
+            this.button1.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.button1.Name = "button1";
-            this.button1.Size = new System.Drawing.Size(75, 23);
+            this.button1.Size = new System.Drawing.Size(86, 29);
             this.button1.TabIndex = 0;
             this.button1.Text = "Test";
             this.button1.UseVisualStyleBackColor = true;
@@ -55,22 +61,72 @@
             // 
             // btnLog
             // 
-            this.btnLog.Location = new System.Drawing.Point(12, 203);
+            this.btnLog.Location = new System.Drawing.Point(14, 254);
+            this.btnLog.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.btnLog.Name = "btnLog";
-            this.btnLog.Size = new System.Drawing.Size(75, 23);
+            this.btnLog.Size = new System.Drawing.Size(86, 29);
             this.btnLog.TabIndex = 0;
             this.btnLog.Text = "LogTest";
             this.btnLog.UseVisualStyleBackColor = true;
             this.btnLog.Click += new System.EventHandler(this.btnLog_Click);
             // 
+            // btnSocketTest
+            // 
+            this.btnSocketTest.Location = new System.Drawing.Point(589, 15);
+            this.btnSocketTest.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
+            this.btnSocketTest.Name = "btnSocketTest";
+            this.btnSocketTest.Size = new System.Drawing.Size(242, 29);
+            this.btnSocketTest.TabIndex = 0;
+            this.btnSocketTest.Text = "SocketTest";
+            this.btnSocketTest.UseVisualStyleBackColor = true;
+            this.btnSocketTest.Click += new System.EventHandler(this.btnSocketTest_Click);
+            // 
+            // btnSocket2
+            // 
+            this.btnSocket2.Location = new System.Drawing.Point(589, 52);
+            this.btnSocket2.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
+            this.btnSocket2.Name = "btnSocket2";
+            this.btnSocket2.Size = new System.Drawing.Size(242, 29);
+            this.btnSocket2.TabIndex = 0;
+            this.btnSocket2.Text = "SocketTest(Dsipose)";
+            this.btnSocket2.UseVisualStyleBackColor = true;
+            this.btnSocket2.Click += new System.EventHandler(this.btnSocket2_Click);
+            // 
+            // btnSockset3
+            // 
+            this.btnSockset3.Location = new System.Drawing.Point(589, 89);
+            this.btnSockset3.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
+            this.btnSockset3.Name = "btnSockset3";
+            this.btnSockset3.Size = new System.Drawing.Size(242, 29);
+            this.btnSockset3.TabIndex = 0;
+            this.btnSockset3.Text = "SocketTest(연결확인)";
+            this.btnSockset3.UseVisualStyleBackColor = true;
+            this.btnSockset3.Click += new System.EventHandler(this.btnSockset3_Click);
+            // 
+            // btnSockset4
+            // 
+            this.btnSockset4.Location = new System.Drawing.Point(589, 126);
+            this.btnSockset4.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
+            this.btnSockset4.Name = "btnSockset4";
+            this.btnSockset4.Size = new System.Drawing.Size(242, 29);
+            this.btnSockset4.TabIndex = 0;
+            this.btnSockset4.Text = "SocketTest(ReceiveLength)";
+            this.btnSockset4.UseVisualStyleBackColor = true;
+            this.btnSockset4.Click += new System.EventHandler(this.btnSockset4_Click);
+            // 
             // FrmMain
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(800, 450);
+            this.ClientSize = new System.Drawing.Size(914, 562);
             this.Controls.Add(this.btnLog);
+            this.Controls.Add(this.btnSockset4);
+            this.Controls.Add(this.btnSockset3);
+            this.Controls.Add(this.btnSocket2);
+            this.Controls.Add(this.btnSocketTest);
             this.Controls.Add(this.button1);
             this.Controls.Add(this.btnTest);
+            this.Margin = new System.Windows.Forms.Padding(3, 4, 3, 4);
             this.Name = "FrmMain";
             this.Text = "TestForm";
             this.ResumeLayout(false);
@@ -82,6 +138,10 @@
         private System.Windows.Forms.Button btnTest;
         private System.Windows.Forms.Button button1;
         private System.Windows.Forms.Button btnLog;
+        private System.Windows.Forms.Button btnSocketTest;
+        private System.Windows.Forms.Button btnSocket2;
+        private System.Windows.Forms.Button btnSockset3;
+        private System.Windows.Forms.Button btnSockset4;
     }
 }
 

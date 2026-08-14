@@ -82,6 +82,10 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\AsyncSocket\AsyncSocket.csproj">
+      <Project>{fbef0024-c416-41d6-8d39-103ee7d094dc}</Project>
+      <Name>AsyncSocket</Name>
+    </ProjectReference>
     <ProjectReference Include="..\DBHandler\DBHandler.csproj">
       <Project>{6cd665d7-a34a-44cb-8379-6362b5d1c59b}</Project>
       <Name>DBHandler</Name>
@@ -93,6 +97,10 @@
     <ProjectReference Include="..\SerialSetting\SerialHandler.csproj">
       <Project>{b6078665-6fee-42ee-91fd-21b5f45e0396}</Project>
       <Name>SerialHandler</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\SocketClient\SocketClient.csproj">
+      <Project>{507443b6-854c-49b0-a8c0-bde1413e15af}</Project>
+      <Name>SocketClient</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
