@@ -18,6 +18,40 @@ namespace SocketClient
         private int m_nReceiveTimeout = 3000;
         private bool m_bReceiveTimedOut = false;
         private bool m_bConnectionClosed = false;
+        private ReceiveState m_receiveState = ReceiveState.None;
+
+        public enum ReceiveState
+        {
+            None = 0,
+            Success,
+            Timeout,
+            ConnectionClosed,
+            Error
+        }
+
+        public ReceiveState LastReceiveState
+        {
+            get
+            {
+                return m_receiveState;
+            }
+        }
+
+        public bool ReceiveTimedOut
+        {
+            get
+            {
+                return m_receiveState == ReceiveState.Timeout;
+            }
+        }
+
+        public bool ConnectionClosed
+        {
+            get
+            {
+                return m_receiveState == ReceiveState.ConnectionClosed;
+            }
+        }
 
         public int ReceiveTimeout
         {
@@ -57,22 +91,6 @@ namespace SocketClient
 
                 return m_Client != null &&
                        m_Client.Connected;
-            }
-        }
-
-        public bool ReceiveTimedOut
-        {
-            get
-            {
-                return m_bReceiveTimedOut;
-            }
-        }
-
-        public bool ConnectionClosed
-        {
-            get
-            {
-                return m_bConnectionClosed;
             }
         }
 
@@ -219,23 +237,25 @@ namespace SocketClient
         private byte[] ReceiveInternal(int p_nLength)
         {
             m_strErrMessage = string.Empty;
-            m_bReceiveTimedOut = false;
-            m_bConnectionClosed = false;
+            m_receiveState = ReceiveState.None;
 
             if (m_bDisposed)
             {
+                m_receiveState = ReceiveState.Error;
                 m_strErrMessage = "이미 Dispose된 SocketClient입니다.";
                 return null;
             }
 
             if (m_Stream == null || m_Client == null)
             {
+                m_receiveState = ReceiveState.Error;
                 m_strErrMessage = "Socket이 연결되지 않았습니다.";
                 return null;
             }
 
             if (p_nLength <= 0)
             {
+                m_receiveState = ReceiveState.Error;
                 m_strErrMessage = "수신 길이는 1 이상이어야 합니다.";
                 return null;
             }
@@ -251,11 +271,13 @@ namespace SocketClient
 
                 if (readLength == 0)
                 {
-                    m_bConnectionClosed = true;
+                    m_receiveState = ReceiveState.ConnectionClosed;
                     m_strErrMessage = "상대방에서 연결을 종료했습니다.";
 
                     return new byte[0];
                 }
+
+                m_receiveState = ReceiveState.Success;
 
                 if (readLength == buffer.Length)
                     return buffer;
@@ -279,11 +301,12 @@ namespace SocketClient
                 if (socketEx != null &&
                     socketEx.SocketErrorCode == SocketError.TimedOut)
                 {
-                    m_bReceiveTimedOut = true;
+                    m_receiveState = ReceiveState.Timeout;
                     m_strErrMessage = "수신 시간이 초과되었습니다.";
                 }
                 else
                 {
+                    m_receiveState = ReceiveState.Error;
                     m_strErrMessage = ex.Message;
                 }
 
@@ -291,13 +314,14 @@ namespace SocketClient
             }
             catch (SocketException ex)
             {
-                m_strErrMessage =
-                    ex.Message + "[Socket 오류]";
+                m_receiveState = ReceiveState.Error;
+                m_strErrMessage = ex.Message + "[Socket 오류]";
 
                 return null;
             }
             catch (Exception ex)
             {
+                m_receiveState = ReceiveState.Error;
                 m_strErrMessage = ex.Message;
 
                 return null;
