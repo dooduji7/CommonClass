@@ -6,18 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Collections;
-
-/***************************************************************************
-// NAME         :   LogHandler
-// Description  :   PTC.MES.LOG 로그 저장 
-// *************************************************************************/
-/*  History     :
- ***************************************************************************
- * * v0.1 2009-10-21  JKCHOI 신규 
- *                    
- *      
- *          
-****************************************************************************/
+ 
 namespace LogHandler
 {
     public enum LogType
@@ -236,14 +225,18 @@ namespace LogHandler
         /// </summary>
         public void Dispose()
         {
-            if (m_threadLog != null)
-            {
-                m_bCloseHandler = true;
-                m_avtLogEvent.Set();
-                m_threadLog.Join();
-                m_threadLog.Abort();
-                m_threadLog = null;
-            }
+            if (m_threadLog == null)
+                return;
+
+            m_bCloseHandler = true;
+
+            // 대기 중인 로그 스레드를 깨움
+            m_avtLogEvent.Set();
+
+            // Queue에 남아 있는 로그까지 처리한 후 종료
+            m_threadLog.Join();
+
+            m_threadLog = null;
         }
         #endregion
         #endregion
@@ -366,7 +359,7 @@ namespace LogHandler
         {
             try
             {
-                while (!m_bCloseHandler)
+                while (true)
                 {
                     try
                     {
@@ -380,6 +373,7 @@ namespace LogHandler
                                 {
                                     objData = (STUC_LOG)m_queLog.Peek();
                                 }
+
                                 string path = "";
 
                                 if (!Directory.Exists(m_strPath))
@@ -388,20 +382,35 @@ namespace LogHandler
                                 }
 
                                 if (objData.strID.Length == 0)
-                                    path = string.Format("{0}\\{1}_{2}", m_strPath, m_strFile, DateTime.Now.ToString("yyyyMMddHH") + ".log");
+                                {
+                                    path = string.Format(
+                                        "{0}\\{1}_{2}",
+                                        m_strPath,
+                                        m_strFile,
+                                        DateTime.Now.ToString("yyyyMMddHH") + ".log");
+                                }
                                 else
-                                    path = string.Format("{0}\\{1}_{2}", m_strPath, objData.strID, DateTime.Now.ToString("yyyyMMddHH") + ".log");
+                                {
+                                    path = string.Format(
+                                        "{0}\\{1}_{2}",
+                                        m_strPath,
+                                        objData.strID,
+                                        DateTime.Now.ToString("yyyyMMddHH") + ".log");
+                                }
 
                                 string strData = string.Empty;
 
-
-
                                 strData += objData.datLog.ToString("HH:mm:ss:ff");
-
 
                                 if (m_bSourceInfo)
                                 {
-                                    strData += " | " + objData.stucSorceInfo.File + " | " + objData.strFunName + "(" + objData.iLineNum + ") ";
+                                    strData += " | "
+                                        + objData.stucSorceInfo.File
+                                        + " | "
+                                        + objData.strFunName
+                                        + "("
+                                        + objData.iLineNum
+                                        + ") ";
                                 }
 
                                 for (int i = 0; i < objData.arrLog.Length; i++)
@@ -415,7 +424,6 @@ namespace LogHandler
                                     {
                                         pFileWriter.WriteLine(strData);
                                     }
-
                                 }
 
                                 lock (m_objQueueLock)
@@ -425,25 +433,37 @@ namespace LogHandler
                             }
                             catch (Exception e)
                             {
-                                System.Diagnostics.Debug.WriteLine("Log " + e.Message);
+                                System.Diagnostics.Debug.WriteLine(
+                                    "Log " + e.Message);
                             }
                         }
+
+                        // Dispose 요청 이후에도 Queue에 남은 로그를
+                        // 모두 처리한 뒤 종료
+                        if (m_bCloseHandler)
+                        {
+                            break;
+                        }
+
                         DeleteLog();
 
                         m_avtLogEvent.WaitOne(10000, false);
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine("Log " + ex.Message);
+                        System.Diagnostics.Debug.WriteLine(
+                            "Log " + ex.Message);
                     }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("Log " + ex.Message);
+                System.Diagnostics.Debug.WriteLine(
+                    "Log " + ex.Message);
             }
 
-            System.Diagnostics.Debug.WriteLine("LogWriteProcess exit!!");
+            System.Diagnostics.Debug.WriteLine(
+                "LogWriteProcess exit!!");
         }
         #endregion
 
