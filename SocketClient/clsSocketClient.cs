@@ -1,9 +1,7 @@
 ﻿using System;
-using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 
 namespace SocketClient
 {
@@ -16,6 +14,48 @@ namespace SocketClient
         private NetworkStream m_Stream;
         private string m_strErrMessage;
         private string m_strIP;
+        private int m_nReceiveTimeout = 3000;
+
+        public int ReceiveTimeout
+        {
+            get
+            {
+                return m_nReceiveTimeout;
+            }
+            set
+            {
+                if (value <= 0)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+
+                m_nReceiveTimeout = value;
+
+                if (m_Stream != null)
+                {
+                    m_Stream.ReadTimeout = value;
+                }
+            }
+        }
+
+        // Properties
+        public string ERROR_MESSAGE
+        {
+            get
+            {
+                return this.m_strErrMessage;
+            }
+        }
+
+        public bool IsConnected
+        {
+            get
+            {
+                if (m_bDisposed)
+                    return false;
+
+                return m_Client != null &&
+                       m_Client.Connected;
+            }
+        }
 
         // Methods
         public clsSocketClient()
@@ -99,6 +139,7 @@ namespace SocketClient
                 }
 
                 m_Stream = m_Client.GetStream();
+                m_Stream.ReadTimeout = m_nReceiveTimeout;
 
                 return true;
             }
@@ -117,26 +158,7 @@ namespace SocketClient
             CloseConnection();
         }
 
-        // Properties
-        public string ERROR_MESSAGE
-        {
-            get
-            {
-                return this.m_strErrMessage;
-            }
-        }
-
-        public bool IsConnected
-        {
-            get
-            {
-                if (m_bDisposed)
-                    return false;
-
-                return m_Client != null &&
-                       m_Client.Connected;
-            }
-        }
+        
 
         private bool SendInternal(string p_strData)
         {
