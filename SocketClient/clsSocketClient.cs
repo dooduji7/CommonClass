@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -15,6 +16,8 @@ namespace SocketClient
         private string m_strErrMessage;
         private string m_strIP;
         private int m_nReceiveTimeout = 3000;
+        private bool m_bReceiveTimedOut = false;
+        private bool m_bConnectionClosed = false;
 
         public int ReceiveTimeout
         {
@@ -54,6 +57,22 @@ namespace SocketClient
 
                 return m_Client != null &&
                        m_Client.Connected;
+            }
+        }
+
+        public bool ReceiveTimedOut
+        {
+            get
+            {
+                return m_bReceiveTimedOut;
+            }
+        }
+
+        public bool ConnectionClosed
+        {
+            get
+            {
+                return m_bConnectionClosed;
             }
         }
 
@@ -200,6 +219,8 @@ namespace SocketClient
         private byte[] ReceiveInternal(int p_nLength)
         {
             m_strErrMessage = string.Empty;
+            m_bReceiveTimedOut = false;
+            m_bConnectionClosed = false;
 
             if (m_bDisposed)
             {
@@ -228,25 +249,57 @@ namespace SocketClient
                     0,
                     buffer.Length);
 
-                if (readLength <= 0)
+                if (readLength == 0)
+                {
+                    m_bConnectionClosed = true;
+                    m_strErrMessage = "상대방에서 연결을 종료했습니다.";
+
                     return new byte[0];
+                }
 
                 if (readLength == buffer.Length)
                     return buffer;
 
                 byte[] result = new byte[readLength];
-                Buffer.BlockCopy(buffer, 0, result, 0, readLength);
+
+                Buffer.BlockCopy(
+                    buffer,
+                    0,
+                    result,
+                    0,
+                    readLength);
 
                 return result;
             }
+            catch (IOException ex)
+            {
+                SocketException socketEx =
+                    ex.InnerException as SocketException;
+
+                if (socketEx != null &&
+                    socketEx.SocketErrorCode == SocketError.TimedOut)
+                {
+                    m_bReceiveTimedOut = true;
+                    m_strErrMessage = "수신 시간이 초과되었습니다.";
+                }
+                else
+                {
+                    m_strErrMessage = ex.Message;
+                }
+
+                return null;
+            }
             catch (SocketException ex)
             {
-                m_strErrMessage = ex.Message + "[Socket 오류]";
+                m_strErrMessage =
+                    ex.Message + "[Socket 오류]";
+
                 return null;
             }
             catch (Exception ex)
             {
                 m_strErrMessage = ex.Message;
+
                 return null;
             }
         }
