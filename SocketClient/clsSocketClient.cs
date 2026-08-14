@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -15,7 +13,6 @@ namespace SocketClient
         private bool m_bDisposed = false;
         private TcpClient m_Client;
         private int m_nPort;
-        private Socket m_Socket;
         private NetworkStream m_Stream;
         private string m_strErrMessage;
         private string m_strIP;
@@ -25,7 +22,6 @@ namespace SocketClient
         {
             this.m_Client = null;
             this.m_Stream = null;
-            this.m_Socket = null;
             this.m_strIP = string.Empty;
             this.m_nPort = 0;
             this.m_strErrMessage = string.Empty;
@@ -35,7 +31,6 @@ namespace SocketClient
         {
             this.m_Client = null;
             this.m_Stream = null;
-            this.m_Socket = null;
             this.m_strIP = string.Empty;
             this.m_nPort = 0;
             this.m_strErrMessage = string.Empty;
@@ -63,75 +58,15 @@ namespace SocketClient
 
         public bool ReadData(out byte[] p_byBuffer)
         {
-            int num = 0;
-            this.m_strErrMessage = string.Empty;
-            while (!this.m_Stream.DataAvailable)
-            {
-                if (this.m_Stream.DataAvailable)
-                {
-                    break;
-                }
-                Thread.Sleep(10);
-                num++;
-                if (num > 10)
-                {
-                    break;
-                }
-            }
-            if (num > 9)
-            {
-                p_byBuffer = null;
-                return false;
-            }
-            BinaryReader reader = new BinaryReader(this.m_Stream, Encoding.ASCII);
-            try
-            {
-                byte[] buffer = new byte[0x800];
-                int num2 = this.m_Client.Client.Receive(buffer);
-                if (num2 > 0)
-                {
-                    p_byBuffer = new byte[num2];
-                    for (int i = 0; i < num2; i++)
-                    {
-                        p_byBuffer[i] = buffer[i];
-                    }
-                }
-                else
-                {
-                    p_byBuffer = new byte[0];
-                }
-            }
-            catch (Exception exception)
-            {
-                p_byBuffer = null;
-                this.m_strErrMessage = exception.Message;
-                return false;
-            }
-            return true;
+            p_byBuffer = ReceiveInternal(0x800);
+
+            return p_byBuffer != null &&
+                   p_byBuffer.Length > 0;
         }
 
         public byte[] ReceiveData(int p_nLength)
         {
-            byte[] buffer = null;
-            BinaryReader reader = new BinaryReader(this.m_Stream, Encoding.ASCII);
-            try
-            {
-                buffer = reader.ReadBytes(p_nLength);
-            }
-            catch (SocketException ex1)
-            {
-                this.m_strErrMessage = ex1.Message + "[Socket 오류]";
-                reader = null;
-                return null;
-            }
-            catch (Exception ex)
-            {
-                this.m_strErrMessage = ex.Message;
-                reader = null;
-                return null;
-            }
-            reader = null;
-            return buffer;
+            return ReceiveInternal(p_nLength);
         }
 
 
@@ -195,7 +130,11 @@ namespace SocketClient
         {
             get
             {
-                return ((this.m_Client != null) && this.m_Client.Connected);
+                if (m_bDisposed)
+                    return false;
+
+                return m_Client != null &&
+                       m_Client.Connected;
             }
         }
 
@@ -233,6 +172,60 @@ namespace SocketClient
             {
                 m_strErrMessage = ex.Message;
                 return false;
+            }
+        }
+
+        private byte[] ReceiveInternal(int p_nLength)
+        {
+            m_strErrMessage = string.Empty;
+
+            if (m_bDisposed)
+            {
+                m_strErrMessage = "이미 Dispose된 SocketClient입니다.";
+                return null;
+            }
+
+            if (m_Stream == null || m_Client == null)
+            {
+                m_strErrMessage = "Socket이 연결되지 않았습니다.";
+                return null;
+            }
+
+            if (p_nLength <= 0)
+            {
+                m_strErrMessage = "수신 길이는 1 이상이어야 합니다.";
+                return null;
+            }
+
+            try
+            {
+                byte[] buffer = new byte[p_nLength];
+
+                int readLength = m_Stream.Read(
+                    buffer,
+                    0,
+                    buffer.Length);
+
+                if (readLength <= 0)
+                    return new byte[0];
+
+                if (readLength == buffer.Length)
+                    return buffer;
+
+                byte[] result = new byte[readLength];
+                Buffer.BlockCopy(buffer, 0, result, 0, readLength);
+
+                return result;
+            }
+            catch (SocketException ex)
+            {
+                m_strErrMessage = ex.Message + "[Socket 오류]";
+                return null;
+            }
+            catch (Exception ex)
+            {
+                m_strErrMessage = ex.Message;
+                return null;
             }
         }
 
@@ -278,8 +271,6 @@ namespace SocketClient
                     m_Client = null;
                 }
             }
-
-            m_Socket = null;
         }
     }
 }
