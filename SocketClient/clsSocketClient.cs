@@ -9,10 +9,10 @@ using System.Threading;
 
 namespace SocketClient
 {
-    public class clsSocketClient
+    public class clsSocketClient : IDisposable
     {
         // Fields
-        public static bool bDisposed = false;
+        private bool m_bDisposed = false;
         private TcpClient m_Client;
         private int m_nPort;
         private Socket m_Socket;
@@ -46,15 +46,19 @@ namespace SocketClient
 
         public void Disposed()
         {
-            if (!bDisposed)
-            {
-                bDisposed = true;
-                if (this.m_Client != null)
-                {
-                    this.m_Client.Close();
-                    this.m_Client = null;
-                }
-            }
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (m_bDisposed)
+                return;
+
+            m_bDisposed = true;
+
+            CloseConnection();
+
+            GC.SuppressFinalize(this);
         }
 
         public bool ReadData(out byte[] p_byBuffer)
@@ -130,104 +134,52 @@ namespace SocketClient
             return buffer;
         }
 
-        public byte[] ReceiveDataa(int p_nLength)
-        {
-            byte[] buffer = null;
-            try
-            {
-                this.m_Socket.Receive(buffer);
-            }
-            catch (Exception)
-            {
-                return null;
-            }
-            return buffer;
-        }
-
-        public bool SendData(string p_strData)
-        {
-            BinaryWriter writer = new BinaryWriter(this.m_Stream, Encoding.ASCII);
-            try
-            {
-                writer.Write(Encoding.ASCII.GetBytes(p_strData));
-                writer.Flush();
-            }
-            catch (SocketException ex1)
-            {
-                this.m_strErrMessage = ex1.Message + "[Socket 오류]";
-                writer = null;
-                return false;
-            }
-            catch (Exception ex)
-            {
-                this.m_strErrMessage = ex.Message;
-                writer = null;
-                return false;
-            }
-            writer = null;
-            return true;
-        }
 
         public bool SocketConnect()
         {
             try
             {
-                if (this.m_Client == null)
+                m_strErrMessage = string.Empty;
+
+                if (m_bDisposed)
                 {
-                    this.m_Client = new TcpClient();
-                }
-                else
-                {
-                    this.m_Client = new TcpClient();
-                }
-                this.m_Client.Connect(IPAddress.Parse(this.m_strIP), this.m_nPort);
-                if (this.m_Client.Connected)
-                {
-                    this.m_Stream = this.m_Client.GetStream();
-                }
-                else
-                {
-                    this.m_strErrMessage = "연결되지 않음";
+                    m_strErrMessage = "이미 Dispose된 SocketClient입니다.";
                     return false;
                 }
+
+                CloseConnection();
+
+                m_Client = new TcpClient();
+
+                m_Client.Connect(
+                    IPAddress.Parse(m_strIP),
+                    m_nPort);
+
+                if (!m_Client.Connected)
+                {
+                    m_strErrMessage = "연결되지 않음";
+
+                    CloseConnection();
+                    return false;
+                }
+
+                m_Stream = m_Client.GetStream();
+
+                return true;
             }
-            catch (Exception exception)
+            catch (Exception ex)
             {
-                this.m_strErrMessage = exception.Message;
+                m_strErrMessage = ex.Message;
+
+                CloseConnection();
+
                 return false;
             }
-            return true;
         }
 
         public void SocketDisconnect()
         {
-            this.m_Stream.Close();
-            this.m_Client.Close();
-            this.m_Client = null;
-        }
-
-        public bool Write(string p_strData)
-        {
-            this.m_strErrMessage = string.Empty;
-            BinaryWriter writer = new BinaryWriter(this.m_Stream, Encoding.ASCII);
-            try
-            {
-                writer.Write(Encoding.ASCII.GetBytes(p_strData));
-                writer.Flush();
-            }
-            catch (SocketException ex1)
-            {
-                this.m_strErrMessage = ex1.Message + "[Socket 오류]";
-                writer = null;
-                return false;
-            }
-            catch (Exception ex)
-            {
-                this.m_strErrMessage = ex.Message;
-                writer = null;
-                return false;
-            }
-            return true;
+            CloseConnection();
         }
 
         // Properties
@@ -245,6 +197,89 @@ namespace SocketClient
             {
                 return ((this.m_Client != null) && this.m_Client.Connected);
             }
+        }
+
+        private bool SendInternal(string p_strData)
+        {
+            m_strErrMessage = string.Empty;
+
+            if (m_bDisposed)
+            {
+                m_strErrMessage = "이미 Dispose된 SocketClient입니다.";
+                return false;
+            }
+
+            if (m_Stream == null)
+            {
+                m_strErrMessage = "Socket이 연결되지 않았습니다.";
+                return false;
+            }
+
+            try
+            {
+                byte[] data = Encoding.ASCII.GetBytes(p_strData);
+
+                m_Stream.Write(data, 0, data.Length);
+                m_Stream.Flush();
+
+                return true;
+            }
+            catch (SocketException ex)
+            {
+                m_strErrMessage = ex.Message + "[Socket 오류]";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                m_strErrMessage = ex.Message;
+                return false;
+            }
+        }
+
+        public bool SendData(string p_strData)
+        {
+            return SendInternal(p_strData);
+        }
+
+        public bool Write(string p_strData)
+        {
+            return SendInternal(p_strData);
+        }
+
+
+        private void CloseConnection()
+        {
+            if (m_Stream != null)
+            {
+                try
+                {
+                    m_Stream.Close();
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    m_Stream = null;
+                }
+            }
+
+            if (m_Client != null)
+            {
+                try
+                {
+                    m_Client.Close();
+                }
+                catch
+                {
+                }
+                finally
+                {
+                    m_Client = null;
+                }
+            }
+
+            m_Socket = null;
         }
     }
 }
