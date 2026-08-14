@@ -417,29 +417,7 @@ namespace LogHandler
 
         private void WriteLog(LogEntry objData)
         {
-            string path = "";
-
-            if (!Directory.Exists(m_strPath))
-            {
-                Directory.CreateDirectory(m_strPath);
-            }
-
-            if (objData.Id.Length == 0)
-            {
-                path = string.Format(
-                    "{0}\\{1}_{2}",
-                    m_strPath,
-                    m_strFile,
-                    DateTime.Now.ToString("yyyyMMddHH") + ".log");
-            }
-            else
-            {
-                path = string.Format(
-                    "{0}\\{1}_{2}",
-                    m_strPath,
-                    objData.Id,
-                    DateTime.Now.ToString("yyyyMMddHH") + ".log");
-            }
+            string path = GetLogFilePath(objData);
 
             StringBuilder builder = new StringBuilder();
 
@@ -463,15 +441,40 @@ namespace LogHandler
                 builder.Append(objData.Messages[i]);
             }
 
-            string strData = builder.ToString();
-
             lock (m_objFileLock)
             {
-                using (StreamWriter pFileWriter = File.AppendText(path))
+                using (StreamWriter writer = File.AppendText(path))
                 {
-                    pFileWriter.WriteLine(strData);
+                    writer.WriteLine(builder.ToString());
                 }
             }
+        }
+
+        private string GetLogFilePath(LogEntry logEntry)
+        {
+            if (!Directory.Exists(m_strPath))
+            {
+                Directory.CreateDirectory(m_strPath);
+            }
+
+            string fileName;
+
+            if (string.IsNullOrEmpty(logEntry.Id))
+            {
+                fileName = string.Format(
+                    "{0}_{1}.log",
+                    m_strFile,
+                    DateTime.Now.ToString("yyyyMMddHH"));
+            }
+            else
+            {
+                fileName = string.Format(
+                    "{0}_{1}.log",
+                    logEntry.Id,
+                    DateTime.Now.ToString("yyyyMMddHH"));
+            }
+
+            return Path.Combine(m_strPath, fileName);
         }
 
         #region[로그 삭제]
@@ -508,6 +511,7 @@ namespace LogHandler
         }
 
         #endregion
+
         #endregion
 
     }
