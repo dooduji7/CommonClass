@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
 using System.Threading;
-using System.Collections;
- 
+
 namespace LogHandler
 {
     public enum LogType
@@ -16,67 +14,85 @@ namespace LogHandler
         Error,
     }
 
-
     /// <summary>
-    /// LogHandler 
+    /// LogHandler
     /// </summary>
     public class Log : IDisposable
     {
-        #region[Member]
+        #region Member
+
+        private static readonly object s_instanceLock = new object();
+        private static readonly object s_fileLock = new object();
 
         /// <summary>
         /// static 접근
         /// </summary>
         private static Log _instance = null;
+
         /// <summary>
         /// Log Queue
         /// </summary>
-        private Queue m_queLog;
+        private readonly Queue<LogEntry> m_queLog;
+
         /// <summary>
         /// Log Queue Lock
         /// </summary>
-        private object m_objQueueLock = null;
-        /// <summary>
-        /// Log File Lock
-        /// </summary>
-        private object m_objFileLock = null;
+        private readonly object m_objQueueLock;
+
         /// <summary>
         /// AutoResetEvent (LogEvent)
         /// </summary>
-        private AutoResetEvent m_avtLogEvent = new AutoResetEvent(false);
+        private readonly AutoResetEvent m_avtLogEvent;
+
         /// <summary>
         /// Log Thread
         /// </summary>
         private Thread m_threadLog;
+
         /// <summary>
         /// Path
         /// </summary>
-        private string m_strPath = "";
+        private readonly string m_strPath;
+
         /// <summary>
         /// FileName
         /// </summary>
-        private string m_strFile = "";
+        private readonly string m_strFile;
+
         /// <summary>
         /// Max custody Log Days
         /// </summary>
         private int m_iMaxLogDay = 30;
+
         private object m_objTag = new object();
 
         /// <summary>
-        /// Log File Last Delete DateTime
+        /// log 파일 삭제 주기(분)
         /// </summary>
-        //private DateTime m_dtDelLastTime;
+        private int m_iDelTerm = 60;
 
         /// <summary>
-        /// log파일 삭제 term
+        /// 마지막 로그 삭제 검사 시각
         /// </summary>
-        private int m_iDelTerm = 60; //60분
+        private DateTime m_dtDelLastTime = DateTime.MinValue;
 
-        private bool m_bSourceInfo;
-        private bool m_bCloseHandler = false;
+        private readonly bool m_bSourceInfo;
+
+        /// <summary>
+        /// Log thread 종료 요청 플래그
+        /// </summary>
+        private volatile bool m_bCloseHandler;
+
+        /// <summary>
+        /// Dispose 중복 실행 방지
+        /// 0 = Active, 1 = Disposed
+        /// </summary>
+        private int m_disposeState;
+
         #endregion
 
-        #region[Struct]
+        #region Struct
+
         /// <summary>
         /// Log Struct
         /// </summary>
@@ -95,7 +111,7 @@ namespace LogHandler
         {
             get
             {
-                return (m_iMaxLogDay);
+                return m_iMaxLogDay;
             }
             set
             {
@@ -107,7 +123,7 @@ namespace LogHandler
         {
             get
             {
-                return (m_iDelTerm);
+                return m_iDelTerm;
             }
             set
             {
@@ -115,10 +131,9 @@ namespace LogHandler
             }
         }
 
-
         #endregion
 
-        #region[class]
+        #region Class
 
         /// <summary>
         /// 소스 info class
@@ -128,11 +143,12 @@ namespace LogHandler
             public string File = "";
             public string Method = "";
             public int LineNumber = 0;
-
         }
+
         #endregion
 
-        #region[Properties]
+        #region Properties
+
         /// <summary>
         /// Max custody Log Days Set
         /// </summary>
@@ -143,6 +159,7 @@ namespace LogHandler
                 m_iMaxLogDay = value;
             }
         }
+
         /// <summary>
         /// Tag(object) Set & Get
         /// </summary>
@@ -157,366 +174,616 @@ namespace LogHandler
                 m_objTag = value;
             }
         }
+
         #endregion
 
-        #region[생성자 및 초기화, 리소스 제거]
+        #region 생성자 및 초기화, 리소스 제거
+
         /// <summary>
-        /// Instance호출
+        /// Instance 호출
         /// </summary>
         /// <returns>LogHandler</returns>
         public static Log Instance()
         {
-            return _instance;
+            lock (s_instanceLock)
+            {
+                return _instance;
+            }
         }
 
-
         /// <summary>
-        /// LogHandler 초기화 
+        /// LogHandler 초기화
         /// </summary>
         /// <param name="strPath">Log 파일 폴더 경로</param>
         /// <param name="strFileID">Log 파일 이름</param>
         /// <param name="bSourceInfo">소스 정보 저장 여부</param>
+        /// <param name="iLogDeleteDay">로그 보관 일수</param>
         /// <returns>LogHandler</returns>
-        public static Log Init(string strPath, string strFileID, bool bSourceInfo, int iLogDeleteDay)
+        public static Log Init(
+            string strPath,
+            string strFileID,
+            bool bSourceInfo,
+            int iLogDeleteDay)
         {
-            if (_instance != null)
+            lock (s_instanceLock)
             {
-                _instance = null;
+                if (_instance != null)
+                {
+                    _instance.Dispose();
+                    _instance = null;
+                }
+
+                _instance =
+                    new Log(
+                        strPath,
+                        strFileID,
+                        bSourceInfo,
+                        iLogDeleteDay);
+
+                return _instance;
             }
-            _instance = new Log(strPath, strFileID, bSourceInfo, iLogDeleteDay);
-            return _instance;
         }
 
-        public Log(string strPath, string strFileID, bool bSourceInfo, int iLogDeleteDay)
+        public Log(
+            string strPath,
+            string strFileID,
+            bool bSourceInfo,
+            int iLogDeleteDay)
         {
-            m_strPath = strPath;
-            m_strFile = ConvertFileID(strFileID);
-            m_iMaxLogDay = iLogDeleteDay;
+            if (string.IsNullOrWhiteSpace(strPath))
+            {
+                throw new ArgumentException(
+                    "로그 경로가 필요합니다.",
+                    nameof(strPath));
+            }
 
-            try
-            {
-                if (!Directory.Exists(m_strPath))
-                {
-                    Directory.CreateDirectory(m_strPath);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.Write(ex.Message);
-            }
+            m_strPath = strPath;
+
+            string convertedFileId =
+                ConvertFileID(strFileID);
+
+            m_strFile =
+                string.IsNullOrWhiteSpace(convertedFileId)
+                    ? "Log"
+                    : convertedFileId;
+
+            m_iMaxLogDay = iLogDeleteDay;
             m_bSourceInfo = bSourceInfo;
 
             m_objQueueLock = new object();
-            m_objFileLock = new object();
+            m_queLog = new Queue<LogEntry>(100);
+            m_avtLogEvent = new AutoResetEvent(false);
 
-            m_queLog = new Queue(100);
+            try
+            {
+                Directory.CreateDirectory(m_strPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(
+                    "Log Directory Create Error : " +
+                    ex.Message);
 
+                m_avtLogEvent.Dispose();
+                throw;
+            }
 
+            m_threadLog =
+                new Thread(
+                    new ThreadStart(LogWriteProcess));
 
-            m_threadLog = new Thread(new ThreadStart(LogWriteProcess));
-
+            m_threadLog.Name = "LogHandler.LogWriteProcess";
             m_threadLog.Start();
-            m_avtLogEvent.Set();
 
+            // 시작 직후 Queue 확인 및 오래된 로그 정리를 수행하도록 깨운다.
+            m_avtLogEvent.Set();
         }
-        #region[Dispose]
+
+        #region Dispose
+
         /// <summary>
         /// Dispose (스레드 종료)
         /// </summary>
         public void Dispose()
         {
-            if (m_threadLog == null)
+            if (Interlocked.Exchange(
+                    ref m_disposeState,
+                    1) != 0)
+            {
                 return;
+            }
 
             m_bCloseHandler = true;
 
-            // 대기 중인 로그 스레드를 깨움
-            m_avtLogEvent.Set();
+            try
+            {
+                // 대기 중인 로그 스레드를 깨움
+                m_avtLogEvent.Set();
+            }
+            catch (ObjectDisposedException)
+            {
+                return;
+            }
 
-            // Queue에 남아 있는 로그까지 처리한 후 종료
-            m_threadLog.Join();
+            Thread thread = m_threadLog;
+
+            if (thread != null &&
+                thread != Thread.CurrentThread)
+            {
+                // Queue에 남아 있는 로그까지 처리한 후 종료
+                thread.Join();
+            }
 
             m_threadLog = null;
+            m_avtLogEvent.Dispose();
         }
-        #endregion
+
         #endregion
 
-        #region[Method]
+        #endregion
 
-        #region[ConvertFileID]
+        #region Method
+
+        #region ConvertFileID
+
         /// <summary>
-        /// 특수 문자 제거
+        /// 파일명에 사용할 수 없는 특수 문자를 공백으로 변경
         /// </summary>
         /// <param name="strID">입력 문자열</param>
-        /// <returns>특수 문자 제거 문자열</returns>
+        /// <returns>파일명 사용 가능 문자열</returns>
         public static string ConvertFileID(string strID)
         {
-            strID = strID.Replace("\\", " ");
-            strID = strID.Replace("/", " ");
-            strID = strID.Replace(":", " ");
-            strID = strID.Replace("*", " ");
-            strID = strID.Replace("?", " ");
-            strID = strID.Replace("<", " ");
-            strID = strID.Replace(">", " ");
-            strID = strID.Replace("|", " ");
-            return strID;
+            if (string.IsNullOrEmpty(strID))
+                return string.Empty;
+
+            char[] invalidChars =
+                Path.GetInvalidFileNameChars();
+
+            StringBuilder builder =
+                new StringBuilder(strID.Length);
+
+            for (int i = 0; i < strID.Length; i++)
+            {
+                char value = strID[i];
+
+                builder.Append(
+                    Array.IndexOf(
+                        invalidChars,
+                        value) >= 0
+                        ? ' '
+                        : value);
+            }
+
+            return builder.ToString();
         }
+
         #endregion
 
-        #region[Get Source info]
+        #region Get Source info
+
         public clsSourceInfo GetSourceInfo()
         {
-            clsSourceInfo SrcInfo = null;
+            clsSourceInfo sourceInfo =
+                new clsSourceInfo();
+
             try
             {
-                StackTrace st = new StackTrace(true);
-                StackFrame sf = st.GetFrame(2);
-                SrcInfo = new clsSourceInfo();
-                try
+                StackTrace stackTrace =
+                    new StackTrace(true);
+
+                StackFrame stackFrame =
+                    stackTrace.GetFrame(2);
+
+                if (stackFrame == null)
+                    return sourceInfo;
+
+                if (stackFrame.GetMethod() != null)
                 {
-                    SrcInfo.Method = sf.GetMethod().Name;
-                    string[] paths = sf.GetFileName().Split('\\');
-                    SrcInfo.File = paths[paths.Length - 1];
-                    SrcInfo.LineNumber = sf.GetFileLineNumber();
+                    sourceInfo.Method =
+                        stackFrame.GetMethod().Name;
                 }
-                catch (Exception ex)
+
+                string fileName =
+                    stackFrame.GetFileName();
+
+                if (!string.IsNullOrEmpty(fileName))
                 {
-                    SrcInfo.File = string.Empty;
-                    SrcInfo.LineNumber = 0;
+                    sourceInfo.File =
+                        Path.GetFileName(fileName);
                 }
-                //string[] paths = sf.GetFileName().Split('\\');
-                //SrcInfo.File = paths[paths.Length - 1];
-                //SrcInfo.Method = sf.GetMethod().Name;
-                //SrcInfo.LineNumber = sf.GetFileLineNumber();
-                return SrcInfo;
+
+                sourceInfo.LineNumber =
+                    stackFrame.GetFileLineNumber();
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.Write(ex.Message);
-                return SrcInfo;
+                Debug.WriteLine(
+                    "GetSourceInfo Error : " +
+                    ex.Message);
             }
 
+            return sourceInfo;
         }
+
         #endregion
 
-        #region[EnqueueLog]
+        #region EnqueueLog
+
         /// <summary>
-        /// 로그입력
+        /// 로그 입력
         /// </summary>
+        /// <param name="strLogType">로그 타입</param>
+        /// <param name="strFunName">함수명</param>
+        /// <param name="iLineNum">라인번호</param>
         /// <param name="arrDatas">로그상세</param>
-        public void EnqueueLog(string strLogType, string strFunName, int iLineNum, string[] arrDatas)
+        public void EnqueueLog(
+            string strLogType,
+            string strFunName,
+            int iLineNum,
+            string[] arrDatas)
         {
+            if (Volatile.Read(ref m_disposeState) != 0)
+                return;
+
             try
             {
-                lock (m_objQueueLock)
-                {
-                    LogEntry data = new LogEntry();
-                    data.Messages = arrDatas;
-                    data.Timestamp = DateTime.Now;
-                    data.Id = "";
-                    data.SourceInfo = GetSourceInfo();
-                    data.LineNumber = iLineNum;
-                    data.LogType = strLogType;
-                    data.FunctionName = strFunName;
-                    m_queLog.Enqueue(data);
-                    m_avtLogEvent.Set();
-                }
+                LogEntry data =
+                    new LogEntry
+                    {
+                        Messages =
+                            arrDatas ?? new string[0],
+                        Timestamp = DateTime.Now,
+                        Id = string.Empty,
+                        SourceInfo =
+                            m_bSourceInfo
+                                ? GetSourceInfo()
+                                : null,
+                        LineNumber = iLineNum,
+                        LogType = strLogType,
+                        FunctionName = strFunName
+                    };
+
+                Enqueue(data);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.Write(ex.Message);
+                Debug.WriteLine(
+                    "EnqueueLog Error : " +
+                    ex.Message);
             }
         }
+
         /// <summary>
-        /// 로그입력
+        /// 로그 입력
         /// </summary>
         /// <param name="strID">저장할 특정 로그파일의 이름 header</param>
         /// <param name="arrDatas">로그상세</param>
-        public void EnqueueLog(string strID, string[] arrDatas)
+        public void EnqueueLog(
+            string strID,
+            string[] arrDatas)
         {
+            if (Volatile.Read(ref m_disposeState) != 0)
+                return;
+
             try
             {
-                lock (m_objQueueLock)
-                {
-                    LogEntry data = new LogEntry();
-                    data.Messages = arrDatas;
-                    data.Timestamp = DateTime.Now;
-                    data.Id = strID;
-                    data.SourceInfo = GetSourceInfo();
-                    m_queLog.Enqueue(data);
-                    m_avtLogEvent.Set();
-                }
+                LogEntry data =
+                    new LogEntry
+                    {
+                        Messages =
+                            arrDatas ?? new string[0],
+                        Timestamp = DateTime.Now,
+                        Id = strID,
+                        SourceInfo =
+                            m_bSourceInfo
+                                ? GetSourceInfo()
+                                : null,
+                        LineNumber = 0,
+                        LogType = string.Empty,
+                        FunctionName = string.Empty
+                    };
+
+                Enqueue(data);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.Write(ex.Message);
+                Debug.WriteLine(
+                    "EnqueueLog Error : " +
+                    ex.Message);
             }
         }
+
+        private void Enqueue(LogEntry data)
+        {
+            lock (m_objQueueLock)
+            {
+                if (Volatile.Read(
+                        ref m_disposeState) != 0)
+                {
+                    return;
+                }
+
+                m_queLog.Enqueue(data);
+            }
+
+            m_avtLogEvent.Set();
+        }
+
         #endregion
 
-        #region[LogWriteProcess]
+        #region LogWriteProcess
+
         private void LogWriteProcess()
         {
             try
             {
                 while (true)
                 {
-                    try
+                    DrainQueue();
+
+                    if (m_bCloseHandler)
                     {
-                        while (true)
-                        {
-                            LogEntry objData;
-
-                            lock (m_objQueueLock)
-                            {
-                                if (m_queLog.Count == 0)
-                                {
-                                    break;
-                                }
-
-                                objData = (LogEntry)m_queLog.Dequeue();
-                            }
-
-                            try
-                            {
-                                WriteLog(objData);
-                            }
-                            catch (Exception ex)
-                            {
-                                System.Diagnostics.Debug.WriteLine(
-                                    "Log Write Error : " + ex.Message);
-                            }
-                        }
-
-                        if (m_bCloseHandler)
+                        // Dispose 직전에 들어온 로그가 있으면 한 번 더 비운다.
+                        if (GetQueueCount() == 0)
                         {
                             break;
                         }
 
-                        DeleteLog();
+                        continue;
+                    }
 
-                        m_avtLogEvent.WaitOne(10000, false);
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine(
-                            "Log Process Error : " + ex.Message);
-                    }
+                    TryDeleteLog();
+
+                    m_avtLogEvent.WaitOne(
+                        10000,
+                        false);
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(
-                    "Log Thread Error : " + ex.Message);
+                Debug.WriteLine(
+                    "Log Thread Error : " +
+                    ex.Message);
+
+                // 예상하지 못한 오류가 발생해도 종료 직전 Queue는 최대한 비운다.
+                try
+                {
+                    DrainQueue();
+                }
+                catch (Exception drainException)
+                {
+                    Debug.WriteLine(
+                        "Log Final Drain Error : " +
+                        drainException.Message);
+                }
             }
 
-            System.Diagnostics.Debug.WriteLine(
+            Debug.WriteLine(
                 "LogWriteProcess exit!!");
         }
+
+        private void DrainQueue()
+        {
+            while (true)
+            {
+                LogEntry logEntry;
+
+                lock (m_objQueueLock)
+                {
+                    if (m_queLog.Count == 0)
+                    {
+                        return;
+                    }
+
+                    logEntry =
+                        m_queLog.Dequeue();
+                }
+
+                try
+                {
+                    WriteLog(logEntry);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine(
+                        "Log Write Error : " +
+                        ex.Message);
+                }
+            }
+        }
+
+        private int GetQueueCount()
+        {
+            lock (m_objQueueLock)
+            {
+                return m_queLog.Count;
+            }
+        }
+
         #endregion
 
-        private void WriteLog(LogEntry objData)
+        private void WriteLog(LogEntry logEntry)
         {
-            string path = GetLogFilePath(objData);
+            string path =
+                GetLogFilePath(logEntry);
 
-            StringBuilder builder = new StringBuilder();
+            StringBuilder builder =
+                new StringBuilder();
 
             builder.Append(
-                objData.Timestamp.ToString("HH:mm:ss:ff"));
+                logEntry.Timestamp.ToString(
+                    "HH:mm:ss:ff"));
 
             if (m_bSourceInfo)
             {
+                clsSourceInfo sourceInfo =
+                    logEntry.SourceInfo;
+
+                string sourceFile =
+                    sourceInfo == null
+                        ? string.Empty
+                        : sourceInfo.File;
+
+                string functionName =
+                    !string.IsNullOrEmpty(
+                        logEntry.FunctionName)
+                        ? logEntry.FunctionName
+                        : sourceInfo == null
+                            ? string.Empty
+                            : sourceInfo.Method;
+
+                int lineNumber =
+                    logEntry.LineNumber > 0
+                        ? logEntry.LineNumber
+                        : sourceInfo == null
+                            ? 0
+                            : sourceInfo.LineNumber;
+
                 builder.Append(" | ");
-                builder.Append(objData.SourceInfo.File);
+                builder.Append(sourceFile);
                 builder.Append(" | ");
-                builder.Append(objData.FunctionName);
+                builder.Append(functionName);
                 builder.Append("(");
-                builder.Append(objData.LineNumber);
+                builder.Append(lineNumber);
                 builder.Append(") ");
             }
 
-            for (int i = 0; i < objData.Messages.Length; i++)
+            string[] messages =
+                logEntry.Messages ??
+                new string[0];
+
+            for (int i = 0;
+                 i < messages.Length;
+                 i++)
             {
                 builder.Append(" | ");
-                builder.Append(objData.Messages[i]);
+                builder.Append(
+                    messages[i] ??
+                    string.Empty);
             }
 
-            lock (m_objFileLock)
+            lock (s_fileLock)
             {
-                using (StreamWriter writer = File.AppendText(path))
+                using (StreamWriter writer =
+                    new StreamWriter(
+                        path,
+                        true,
+                        Encoding.UTF8))
                 {
-                    writer.WriteLine(builder.ToString());
+                    writer.WriteLine(
+                        builder.ToString());
                 }
             }
         }
 
-        private string GetLogFilePath(LogEntry logEntry)
+        private string GetLogFilePath(
+            LogEntry logEntry)
         {
-            if (!Directory.Exists(m_strPath))
-            {
-                Directory.CreateDirectory(m_strPath);
-            }
+            Directory.CreateDirectory(
+                m_strPath);
 
-            string fileName;
+            string convertedId =
+                ConvertFileID(logEntry.Id);
 
-            if (string.IsNullOrEmpty(logEntry.Id))
-            {
-                fileName = string.Format(
+            string filePrefix =
+                string.IsNullOrWhiteSpace(convertedId)
+                    ? m_strFile
+                    : convertedId;
+
+            string fileName =
+                string.Format(
                     "{0}_{1}.log",
-                    m_strFile,
-                    DateTime.Now.ToString("yyyyMMddHH"));
-            }
-            else
-            {
-                fileName = string.Format(
-                    "{0}_{1}.log",
-                    logEntry.Id,
-                    DateTime.Now.ToString("yyyyMMddHH"));
-            }
+                    filePrefix,
+                    logEntry.Timestamp.ToString(
+                        "yyyyMMddHH"));
 
-            return Path.Combine(m_strPath, fileName);
+            return Path.Combine(
+                m_strPath,
+                fileName);
         }
 
-        #region[로그 삭제]
-        private void DeleteLog()
+        #region 로그 삭제
+
+        private void TryDeleteLog()
         {
+            if (m_iDelTerm <= 0)
+                return;
 
-            int DaleteDay = 0;
-            string[] files = Directory.GetFiles(m_strPath, "*.*");
+            DateTime now =
+                DateTime.Now;
 
-            DateTime dt = DateTime.Now;
+            if (m_dtDelLastTime !=
+                    DateTime.MinValue &&
+                now.Subtract(
+                    m_dtDelLastTime)
+                    .TotalMinutes <
+                    m_iDelTerm)
+            {
+                return;
+            }
+
+            if (DeleteLog())
+            {
+                m_dtDelLastTime = now;
+            }
+        }
+
+        private bool DeleteLog()
+        {
+            if (m_iMaxLogDay <= 0)
+                return true;
+
             try
             {
+                if (!Directory.Exists(m_strPath))
+                    return true;
 
+                string[] files =
+                    Directory.GetFiles(
+                        m_strPath,
+                        "*.log",
+                        SearchOption.TopDirectoryOnly);
 
-                foreach (string strfile in files)
+                DateTime deleteBefore =
+                    DateTime.Now.AddDays(
+                        -m_iMaxLogDay);
+
+                foreach (string filePath in files)
                 {
-
-                    dt = File.GetCreationTime(strfile);
-
-                    // 여기서는 하루 전날 이하인 파일을 삭제하므로 -1
-
-                    DaleteDay = Convert.ToInt32("-" + m_iMaxLogDay);
-                    if (DateTime.Compare((DateTime.Now.AddDays(DaleteDay)), dt) > 0)
+                    try
                     {
-                        File.Delete(strfile);
+                        DateTime lastWriteTime =
+                            File.GetLastWriteTime(
+                                filePath);
+
+                        if (lastWriteTime <
+                            deleteBefore)
+                        {
+                            File.Delete(filePath);
+                        }
+                    }
+                    catch (Exception fileException)
+                    {
+                        Debug.WriteLine(
+                            "Log Delete File Error : " +
+                            fileException.Message);
                     }
                 }
+
+                return true;
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                return;
+                Debug.WriteLine(
+                    "Log Delete Error : " +
+                    ex.Message);
+
+                return false;
             }
         }
 
         #endregion
 
         #endregion
-
     }
-
-
-
-
 }
