@@ -12,7 +12,7 @@ namespace DBHandler
     {
         #region[MSSQLDbAccess]
         /// <summary>
-        /// OracleDbAccess 생성자 입니다.
+        /// MSSQLDbAccess 생성자 입니다.
         /// </summary>
         public MSSQLDbAccess() { }
         #endregion
@@ -833,42 +833,42 @@ namespace DBHandler
         }
 
         /// <summary>
-        /// OracleDataReader 형태로 데이터 반환
+        /// SqlDataReader 형태로 데이터 반환
         /// 기본 연결문을 가진다.
         /// </summary>
         /// <param name="commandTimeout">명령타임아웃시간</param>
         /// <param name="commandText">명령문자열</param>
         /// <param name="oraParameters">명령매개변수</param>
         /// <param name="commandType">명령문 타입</param>
-        /// <returns>OracleDataReader</returns>
+        /// <returns>SqlDataReader</returns>
         public static SqlDataReader GetSqlDataReader(int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
             return GetSqlDataReader(strConnectionString, commandTimeout, commandText, oraParameters, commandType);
         }
 
         /// <summary>
-        /// OracleDataReader 형태로 데이터 반환
+        /// SqlDataReader 형태로 데이터 반환
         /// 기본 타임아웃시간을 가진다.
         /// </summary>
         /// <param name="p_strConnectionString">연결문</param>
         /// <param name="commandText">명령문자열</param>
         /// <param name="oraParameters">명령매개변수</param>
         /// <param name="commandType">명령문 타입</param>
-        /// <returns>OracleDataReader</returns>
+        /// <returns>SqlDataReader</returns>
         public static SqlDataReader GetSqlDataReader(string p_strConnectionString, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
             return GetSqlDataReader(p_strConnectionString, COMMAND_TIMEOUT, commandText, oraParameters, commandType);
         }
 
         /// <summary>
-        /// OracleDataReader 형태로 데이터 반환
+        /// SqlDataReader 형태로 데이터 반환
         /// </summary>
         /// <param name="p_strConnectionString">연결문</param>
         /// <param name="commandTimeout">명령타임아웃시간</param>
         /// <param name="commandText">명령문자열</param>
         /// <param name="oraParameters">명령매개변수</param>
         /// <param name="commandType">명령문 타입</param>
-        /// <returns>OracleDataReader</returns>
+        /// <returns>SqlDataReader</returns>
         public static SqlDataReader GetSqlDataReader(string p_strConnectionString, int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
             SqlConnection con = null;
@@ -1517,7 +1517,7 @@ namespace DBHandler
         }
         #endregion
 
-        #region OraAgent : public void GetErrorCode(Exception e, ref string p_strErrCode, ref string p_strErrText)
+        #region MssqlAgent : public void GetErrorCode(Exception e, ref string p_strErrCode, ref string p_strErrText)
         /// <summary>
         /// GetErrorCode
         /// </summary>
@@ -1542,7 +1542,7 @@ namespace DBHandler
 
         #endregion
 
-        #region OraAgent : public void MessageFormat(Exception e, string p_strTitle, string p_strAction, string p_strAdjust,
+        #region MssqlAgent : public void MessageFormat(Exception e, string p_strTitle, string p_strAction, string p_strAdjust,
 
         /// <summary>
         /// 해당 에러 메시지를 형식에 맞게 변경시킨다. 
@@ -1626,10 +1626,6 @@ namespace DBHandler
 
                 iReturn = m_DBCmd.ExecuteNonQuery();
             }
-            catch (Exception e)
-            {
-                throw;
-            }
             finally
             {
                 if (m_DBCmd != null) m_DBCmd.Dispose();
@@ -1639,7 +1635,7 @@ namespace DBHandler
         }
         #endregion
 
-        #region OraAgent : public bool ExecuteNonQuery( string p_strSQL, ref string p_strErrCode, ref string p_strErrText)
+        #region MssqlAgent : public bool ExecuteNonQuery( string p_strSQL, ref string p_strErrCode, ref string p_strErrText)
         /// <summary>
         /// SQL문을 실행합니다.
         /// </summary>
@@ -1677,53 +1673,16 @@ namespace DBHandler
                 return false;
             }
         }
+   
+        #region MssqlAgent : public SqlDataReader ExecuteReader( string p_strSQL, ref string p_strErrCode, ref string p_strErrText)
         /// <summary>
         /// SQL문을 실행합니다.
-        /// </summary>
-        /// <param name="p_strSQL">SQL문</param>
-        /// <param name="p_nLongSize">InitialLONGFetchSize</param>
-        /// <param name="p_strErrCode">Error Code(out)</param>
-        /// <param name="p_strErrText">Error Text(out)</param>
-        /// <returns>성공여부</returns>
-        //public bool ExecuteNonQuery(string p_strSQL, int p_nLongSize, ref string p_strErrCode, ref string p_strErrText)
-        //{
-        //    try
-        //    {
-        //        m_DBCmd = m_DBCon.CreateCommand();
-        //        m_DBCmd.CommandType = CommandType.Text;
-        //        m_DBCmd.InitialLONGFetchSize = p_nLongSize;
-        //        m_DBCmd.CommandText = p_strSQL;
-        //        m_nRows = m_DBCmd.ExecuteNonQuery();
-
-        //        if (m_nRows == 0)
-        //        {
-        //            p_strErrCode = OracleDBDef.ORAMID_NOFOUND;
-        //            return false;
-        //        }
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
-        //        return false;
-        //    }
-        //    finally
-        //    {
-        //        m_DBCmd.Dispose();
-        //    }
-
-        //    return true;
-        //}
-        #endregion
-
-        #region OraAgent : public OracleDataReader ExecuteReader( string p_strSQL, ref string p_strErrCode, ref string p_strErrText)
-        /// <summary>
-        /// SQL문을 실행합니다.
-        /// OracleDataReader 형태로 데이터 반환합니다.
+        /// SqlDataReader 형태로 데이터 반환합니다.
         /// </summary>
         /// <param name="p_strSQL">SQL문</param>
         /// <param name="p_strErrCode">Error Code(out)</param>
         /// <param name="p_strErrText">Error Text(out)</param>
-        /// <returns>OracleDataReader</returns>
+        /// <returns>SqlDataReader</returns>
         public SqlDataReader ExecuteReader(string p_strSQL, ref string p_strErrCode, ref string p_strErrText)
         {
             try
@@ -1758,38 +1717,6 @@ namespace DBHandler
                 return null;
             }
         }
-        /// <summary>
-        /// SQL문을 실행합니다.
-        /// OracleDataReader 형태로 데이터 반환합니다.
-        /// </summary>
-        /// <param name="p_strSQL">SQL문</param>
-        /// <param name="p_nLongSize">InitialLONGFetchSize</param>
-        /// <param name="p_strErrCode">Error Code(out)</param>
-        /// <param name="p_strErrText">Error Text(out)</param>
-        /// <returns></returns>
-        //public OracleDataReader ExecuteReader(string p_strSQL, int p_nLongSize, ref string p_strErrCode, ref string p_strErrText)
-        //{
-        //    try
-        //    {
-        //        m_DBCmd = m_DBCon.CreateCommand();
-        //        m_DBCmd.CommandType = CommandType.Text;
-        //        m_DBCmd.InitialLONGFetchSize = p_nLongSize;
-        //        m_DBCmd.CommandText = p_strSQL;
-        //        m_DataReader = m_DBCmd.ExecuteReader();
-
-        //        return m_DataReader;
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
-        //        return null;
-        //    }
-        //    finally
-        //    {
-        //        m_DBCmd.Dispose();
-        //    }
-        //}
-
         #endregion
 
         #region SqlAgent : public bool ExecuteScalar(string p_strSQL, ref int p_nValue, ref string p_strErrCode, ref string p_strErrText)
@@ -1906,7 +1833,7 @@ namespace DBHandler
         }
         #endregion
 
-        #region OraAgent : public bool ExecuteScalar(string p_strSQL, ref string p_strValue, ref string p_strErrCode, ref string p_strErrText)
+        #region MssqlAgent : public bool ExecuteScalar(string p_strSQL, ref string p_strValue, ref string p_strErrCode, ref string p_strErrText)
         /// <summary>
         /// SQL문을 실행합니다.
         /// </summary>
@@ -1964,77 +1891,6 @@ namespace DBHandler
                 param.Value = System.DBNull.Value;
             cmd.Parameters.Add(param);
         }
-        #endregion
-    }
-    #endregion
-
-    #region[MSSQLDBDef]
-    public class MSSQLDBDef
-    {
-        /// <summary>
-        /// OracleDBDef 생성자 입니다.
-        /// </summary>
-        public MSSQLDBDef() { }
-
-        //------------------------------------------------------------------------------
-        // MSSQL DB Error Code   -> 아직 정의되지 않음
-        //------------------------------------------------------------------------------        
-        #region DEFINE : Oracle DB Error Code
-        /// <summary>
-        /// DB error code : Normal
-        /// </summary>
-        public const string ORAMID_GOOD = "O00000";
-        /// <summary>
-        ///  DB error code : Disconnect
-        /// </summary>
-        public const string ORAMID_NOCONN = "O03114";
-        /// <summary>
-        /// DB error code : Disconnect1
-        /// </summary>
-        public const string ORAMID_NOCONN1 = "O01012";
-        /// <summary>
-        /// DB error code : Disconnect2
-        /// </summary>
-        public const string ORAMID_NOCONN2 = "O01089";
-        /// <summary>
-        /// DB error code : Disconnect3
-        /// </summary>
-        public const string ORAMID_NOCONN3 = "O03113";
-        /// <summary>
-        /// DB error code : Disconnect4
-        /// </summary>
-        public const string ORAMID_NOCONN4 = "O03114";
-        /// <summary>
-        /// DB error code : Disconnect5
-        /// </summary>
-        public const string ORAMID_NOCONN5 = "O12152";
-        /// <summary>
-        /// DB error code : Disconnect6
-        /// </summary>
-        public const string ORAMID_NOCONN6 = "O12560";
-        /// <summary>
-        /// DB error code : Disconnect7
-        /// </summary>
-        public const string ORAMID_NOCONN7 = "O12571";
-        /// <summary>
-        /// DB error code : No data found
-        /// </summary>
-        public const string ORAMID_NOFOUND = "O01403";
-        /// <summary>
-        /// DB error code : No data found(AQ)
-        /// </summary>
-        public const string ORAMID_QUENODATA = "O25228";
-        /// <summary>
-        /// DB error code : Unique constraint 
-        /// </summary>
-        public const string ORAMID_OVERLAP = "O00001";
-        /// <summary>
-        /// DB error code : Database lock 
-        /// </summary>
-        public const string ORAMID_LOCK = "O00054";
-
-        //		public const string ORAMID_ETC		= "AC8199";	    // DB error code : etc...
-        //		public const string USRMID_ETC		= "AC7901";	    // DB error code : etc...
         #endregion
     }
     #endregion
