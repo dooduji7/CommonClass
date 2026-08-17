@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Data;
 using Oracle.ManagedDataAccess.Client;
 namespace DBHandler
@@ -49,6 +45,49 @@ namespace DBHandler
         }
         #endregion
 
+        #region[Parameter Helpers]
+        private static OracleParameter[] CreateInputParameters(string strID, string strVAL, char split)
+        {
+            if (string.IsNullOrWhiteSpace(strID))
+                return null;
+
+            string[] paramIds = strID.Split(split);
+            string[] paramValues = (strVAL ?? string.Empty).Split(split);
+
+            if (paramIds.Length != paramValues.Length)
+                throw new ArgumentException("Parameter name/value count does not match.");
+
+            OracleParameter[] parameters = new OracleParameter[paramIds.Length];
+
+            for (int i = 0; i < paramIds.Length; i++)
+            {
+                parameters[i] = new OracleParameter(paramIds[i], paramValues[i])
+                {
+                    Direction = ParameterDirection.Input
+                };
+            }
+
+            return parameters;
+        }
+
+        private static OracleParameter[] CreateInputParametersWithCursor(string strID, string strVAL, char split)
+        {
+            OracleParameter[] inputs = CreateInputParameters(strID, strVAL, split);
+            int inputCount = inputs == null ? 0 : inputs.Length;
+            OracleParameter[] parameters = new OracleParameter[inputCount + 1];
+
+            if (inputs != null)
+                Array.Copy(inputs, parameters, inputCount);
+
+            parameters[inputCount] = new OracleParameter("P_CURSOR", OracleDbType.RefCursor)
+            {
+                Direction = ParameterDirection.Output
+            };
+
+            return parameters;
+        }
+        #endregion
+
         #region[ExecuteProcedure]
         /// <summary>
         /// 오라클 DB 프로시져 실행
@@ -58,69 +97,13 @@ namespace DBHandler
         /// <param name="strVAL">파라미터 값</param>
         public static void ExecuteProcedure(string strSpName, string strID, string strVAL)
         {
-            try
-            {
-                string[] strParamID = null;
-                string[] strParamVAL = null;
-
-                if (strID.Trim().Length != 0)
-                {
-                    strParamID = strID.Split('@');
-                    strParamVAL = strVAL.Split('@');
-
-                    OracleParameter[] Params = new OracleParameter[strParamID.Length];
-
-                    for (int i = 0; i < strParamID.Length; i++)
-                    {
-                        Params[i] = new OracleParameter(strParamID[i], strParamVAL[i]);
-                        Params[i].Direction = ParameterDirection.Input;
-                    }
-                    OracleDbAccess.Execute(strSpName, Params, CommandType.StoredProcedure);
-                }
-                else
-                {
-                    OracleDbAccess.Execute(strSpName, null, CommandType.StoredProcedure);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                System.Diagnostics.Debug.WriteLine(ex.StackTrace);
-                throw;
-            }
+            ExecuteProcedure(strSpName, strID, strVAL, '@');
         }
+
         public static void ExecuteProcedure(string strSpName, string strID, string strVAL, char split)
         {
-            try
-            {
-                string[] strParamID = null;
-                string[] strParamVAL = null;
-
-                if (strID.Trim().Length != 0)
-                {
-                    strParamID = strID.Split(split);
-                    strParamVAL = strVAL.Split(split);
-
-                    OracleParameter[] Params = new OracleParameter[strParamID.Length];
-
-                    for (int i = 0; i < strParamID.Length; i++)
-                    {
-                        Params[i] = new OracleParameter(strParamID[i], strParamVAL[i]);
-                        Params[i].Direction = ParameterDirection.Input;
-                    }
-                    OracleDbAccess.Execute(strSpName, Params, CommandType.StoredProcedure);
-                }
-                else
-                {
-                    OracleDbAccess.Execute(strSpName, null, CommandType.StoredProcedure);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                System.Diagnostics.Debug.WriteLine(ex.StackTrace);
-                throw;
-            }
+            OracleParameter[] parameters = CreateInputParameters(strID, strVAL, split);
+            Execute(strSpName, parameters, CommandType.StoredProcedure);
         }
         #endregion
 
@@ -134,90 +117,13 @@ namespace DBHandler
         /// <returns></returns>
         public static DataSet ExecuteProcedureResult(string strSpName, string strID, string strVAL)
         {
-            DataSet ds = null;
-            try
-            {
-                string[] strParamID = null;
-                string[] strParamVAL = null;
-
-                if (strID.Trim().Length != 0)
-                {
-                    strParamID = strID.Split('@');
-                    strParamVAL = strVAL.Split('@');
-
-                    OracleParameter[] Params = new OracleParameter[strParamID.Length + 1];
-                    int i = 0;
-                    for (i = 0; i < strParamID.Length; i++)
-                    {
-                        Params[i] = new OracleParameter(strParamID[i], strParamVAL[i]);
-                        Params[i].Direction = ParameterDirection.Input;
-                    }
-
-                    Params[i] = new OracleParameter("P_CURSOR", OracleDbType.RefCursor);
-                    Params[i].Direction = ParameterDirection.Output;
-
-                    return OracleDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
-                }
-                else
-                {
-                    OracleParameter[] Params = new OracleParameter[1];
-                    Params[0] = new OracleParameter("P_CURSOR", OracleDbType.RefCursor);
-                    Params[0].Direction = ParameterDirection.Output;
-                    return OracleDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                System.Diagnostics.Debug.WriteLine(ex.StackTrace);
-                throw;
-            }
-
-            return ds;
+            return ExecuteProcedureResult(strSpName, strID, strVAL, '@');
         }
 
         public static DataSet ExecuteProcedureResult(string strSpName, string strID, string strVAL, char split)
         {
-            DataSet ds = null;
-            try
-            {
-                string[] strParamID = null;
-                string[] strParamVAL = null;
-
-                if (strID.Trim().Length != 0)
-                {
-                    strParamID = strID.Split(split);
-                    strParamVAL = strVAL.Split(split);
-
-                    OracleParameter[] Params = new OracleParameter[strParamID.Length + 1];
-                    int i = 0;
-                    for (i = 0; i < strParamID.Length; i++)
-                    {
-                        Params[i] = new OracleParameter(strParamID[i], strParamVAL[i]);
-                        Params[i].Direction = ParameterDirection.Input;
-                    }
-
-                    Params[i] = new OracleParameter("P_CURSOR", OracleDbType.RefCursor);
-                    Params[i].Direction = ParameterDirection.Output;
-
-                    return OracleDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
-                }
-                else
-                {
-                    OracleParameter[] Params = new OracleParameter[1];
-                    Params[0] = new OracleParameter("P_CURSOR", OracleDbType.RefCursor);
-                    Params[0].Direction = ParameterDirection.Output;
-                    return OracleDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                System.Diagnostics.Debug.WriteLine(ex.StackTrace);
-                throw;
-            }
-
-            return ds;
+            OracleParameter[] parameters = CreateInputParametersWithCursor(strID, strVAL, split);
+            return GetDataSet(strSpName, parameters, CommandType.StoredProcedure);
         }
         #endregion
 
@@ -273,63 +179,23 @@ namespace DBHandler
         /// <returns>실행된 행의 수</returns>
         public static int Execute(string p_strConnectionString, int commandTimeout, string commandText, OracleParameter[] oraParameters, CommandType commandType)
         {
-            int iReturn = 0;
+            WriteDebugCommand(commandText, oraParameters);
 
-            OracleConnection con = null;
-            OracleCommand cmd = null;
-
-            try
+            using (OracleConnection con = new OracleConnection(p_strConnectionString))
+            using (OracleCommand cmd = new OracleCommand())
             {
-                #region JSBANG
-                string strData = commandText + " : ";
-                if (oraParameters != null)
+                ConfigureCommand(cmd, commandText, commandType, commandTimeout, oraParameters);
+
+                if (m_SQLTraceMode.Equals("on"))
                 {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        strData += " , " + string.Format("{0}", param.Value);
-                    }
-                }
-                System.Diagnostics.Debug.WriteLine(strData);
-                #endregion
-
-
-                cmd = new OracleCommand();
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-
-                if (oraParameters != null)
-                {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
+                    SQLTrace(m_SQLTracePath, cmd, true);
                 }
 
-                if (m_SQLTraceMode.Equals("on")) SQLTrace(m_SQLTracePath, cmd, true);
-
-                con = new OracleConnection(p_strConnectionString);
                 con.Open();
-
                 cmd.Connection = con;
-                iReturn = cmd.ExecuteNonQuery();
-            }
-            catch (Exception e)
-            {
-                throw e;
-            }
-            finally
-            {
-                if (con != null)
-                {
-                    if (con.State == ConnectionState.Open)
-                        con.Close();
-                    con.Dispose();
-                }
-                if (cmd != null) cmd.Dispose();
-            }
 
-            return iReturn;
+                return cmd.ExecuteNonQuery();
+            }
         }
         #endregion
 
@@ -387,57 +253,23 @@ namespace DBHandler
         /// <returns>첫번째행 리턴</returns>
         public static object ExecuteScalar(string p_strConnectionString, int commandTimeout, string commandText, OracleParameter[] oraParameters, CommandType commandType)
         {
-            OracleConnection con = null;
-            OracleCommand cmd = null;
-            object oReturn = null;
+            WriteDebugCommand(commandText, oraParameters);
 
-            try
+            using (OracleConnection con = new OracleConnection(p_strConnectionString))
+            using (OracleCommand cmd = new OracleCommand())
             {
-                #region JSBANG
-                string strData = commandText + " : ";
-                if (oraParameters != null)
-                {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        strData += " , " + string.Format("{0}", param.Value);
-                    }
-                }
-                System.Diagnostics.Debug.WriteLine(strData);
-                #endregion
+                ConfigureCommand(cmd, commandText, commandType, commandTimeout, oraParameters);
 
-                cmd = new OracleCommand();
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-
-                if (oraParameters != null)
+                if (m_SQLTraceMode.Equals("on"))
                 {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
+                    SQLTrace(m_SQLTracePath, cmd, true);
                 }
 
-                if (m_SQLTraceMode.Equals("on")) SQLTrace(m_SQLTracePath, cmd, true);
-
-                con = new OracleConnection(p_strConnectionString);
                 con.Open();
-
                 cmd.Connection = con;
-                oReturn = cmd.ExecuteScalar();
 
+                return cmd.ExecuteScalar();
             }
-            finally
-            {
-                if (con != null)
-                {
-                    if (con.State == ConnectionState.Open)
-                        con.Close();
-                    con.Dispose();
-                }
-                if (cmd != null) cmd.Dispose();
-            }
-            return oReturn;
         }
 
         #endregion
@@ -500,86 +332,63 @@ namespace DBHandler
         /// <returns>적용행수</returns>
         public static int ExecuteMultiple(string p_strConnectionString, int commandTimeout, string commandText, OracleParameter[] oraParameters, string[,] paramValues, CommandType commandType)
         {
-            if (oraParameters == null) throw new System.Exception("");//에러 메시지 어떻게 가져올 것인가?
+            if (oraParameters == null)
+                throw new ArgumentNullException(nameof(oraParameters));
 
-            #region JSBANG
-            string strData = commandText + " : ";
-            if (oraParameters != null)
+            if (paramValues == null)
+                throw new ArgumentNullException(nameof(paramValues));
+
+            int rowCount = paramValues.GetLength(0);
+            int columnCount = paramValues.GetLength(1);
+
+            if (columnCount != oraParameters.Length)
             {
-                foreach (OracleParameter param in oraParameters)
-                {
-                    strData += " , " + string.Format("{0}", param.Value);
-                }
+                throw new ArgumentException(
+                    "Parameter count and value column count do not match.",
+                    nameof(paramValues));
             }
-            System.Diagnostics.Debug.WriteLine(strData);
-            #endregion
 
-            int iReturn = 0;
+            if (rowCount == 0)
+                return 0;
 
-            if (paramValues.Length > 0)
+            WriteDebugCommand(commandText, oraParameters);
+
+            int affectedRows = 0;
+
+            using (OracleConnection con = new OracleConnection(p_strConnectionString))
+            using (OracleCommand cmd = new OracleCommand())
             {
-                OracleConnection con = null;
-                OracleCommand cmd = null;
+                ConfigureCommand(cmd, commandText, commandType, commandTimeout, oraParameters);
 
-                int iColumnCount = paramValues.GetUpperBound(1) + 1;
-                int iRowCount = paramValues.GetUpperBound(0) + 1;
-                int iCol = 0;
-                int iRow = 0;
+                con.Open();
+                cmd.Connection = con;
+                cmd.Prepare();
 
-                string[] paramVals = new string[iColumnCount];
-                for (iCol = 0; iCol < iColumnCount; iCol++)
-                    paramVals[iCol] = paramValues[iRow, iCol];
-
-                try
+                for (int row = 0; row < rowCount; row++)
                 {
-                    cmd = new OracleCommand();
-                    cmd.CommandText = commandText;
-                    cmd.CommandType = commandType;
-                    cmd.CommandTimeout = commandTimeout;
-
-                    foreach (OracleParameter param in oraParameters)
+                    for (int col = 0; col < columnCount; col++)
                     {
-                        AddParameter(cmd, param);
+                        string value = paramValues[row, col];
+
+                        cmd.Parameters[col].Value =
+                            string.IsNullOrEmpty(value)
+                                ? (object)DBNull.Value
+                                : value;
                     }
 
-                    if (cmd != null)
+                    if (m_SQLTraceMode.Equals("on"))
                     {
-                        con = new OracleConnection(p_strConnectionString);
-                        con.Open();
-
-                        cmd.Connection = con;
-                        cmd.Prepare();
-
-                        for (iRow = 0; iRow < iRowCount; iRow++)
-                        {
-                            for (iCol = 0; iCol < iColumnCount; iCol++)
-                            {
-                                string strValue = paramValues[iRow, iCol];
-                                if ((strValue == null) || (strValue.Length == 0)) cmd.Parameters[iCol].Value = System.DBNull.Value;
-                                else cmd.Parameters[iCol].Value = strValue;
-                            }
-                            if (m_SQLTraceMode.Equals("on"))
-                            {
-                                if (iRow == (iRowCount - 1)) SQLTrace(m_SQLTracePath, cmd, true);
-                                else SQLTrace(m_SQLTracePath, cmd, false);
-                            }
-                            iReturn += cmd.ExecuteNonQuery();
-                        }
+                        SQLTrace(
+                            m_SQLTracePath,
+                            cmd,
+                            row == rowCount - 1);
                     }
-                }
-                finally
-                {
-                    if (con != null)
-                    {
-                        if (con.State == ConnectionState.Open)
-                            con.Close();
-                        con.Dispose();
-                    }
-                    if (cmd != null) cmd.Dispose();
+
+                    affectedRows += cmd.ExecuteNonQuery();
                 }
             }
 
-            return iReturn;
+            return affectedRows;
         }
 
         #endregion
@@ -638,88 +447,28 @@ namespace DBHandler
         /// <returns>dataset</returns>
         public static DataSet GetDataSet(string p_strConnectionString, int commandTimeout, string commandText, OracleParameter[] oraParameters, CommandType commandType)
         {
-            OracleConnection con = null;
-            OracleCommand cmd = null;
-            OracleDataAdapter da = null;
-#if PTC
-            clsDataSet dsReturn = null;
-#else
-            DataSet dsReturn = null;
-#endif
+            WriteDebugCommand(commandText, oraParameters);
 
+            DataSet dsReturn = new DataSet();
 
-
-            try
+            using (OracleConnection con = new OracleConnection(p_strConnectionString))
+            using (OracleCommand cmd = new OracleCommand())
             {
-                #region JSBANG
-                string strData = commandText + " : ";
+                ConfigureCommand(cmd, commandText, commandType, commandTimeout, oraParameters);
 
-                if (oraParameters != null)
+                if (m_SQLTraceMode.Equals("on"))
                 {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        strData += " , " + string.Format("{0}", param.Value);
-                    }
-                }
-                System.Diagnostics.Debug.WriteLine(strData);
-                #endregion
-
-                cmd = new OracleCommand();
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-                //cmd.InitialLONGFetchSize = -1; 
-
-                if (oraParameters != null)
-                {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
+                    SQLTrace(m_SQLTracePath, cmd, true);
                 }
 
-                if (m_SQLTraceMode.Equals("on")) SQLTrace(m_SQLTracePath, cmd, true);
-
-                con = new OracleConnection(p_strConnectionString);
                 con.Open();
-
                 cmd.Connection = con;
 
-#if PTC
-                dsReturn = new clsDataSet();
-#else
-                dsReturn = new DataSet();
-#endif
-                da = new OracleDataAdapter(cmd);
-                da.Fill(dsReturn);
-
-#if PTC
-                string strParam = "";
-
-                foreach (OracleParameter param in da.SelectCommand.Parameters)
+                using (OracleDataAdapter da = new OracleDataAdapter(cmd))
                 {
-                    if (param.OracleType != OracleType.Cursor)
-                    {
-                        strParam += param.Value.ToString() + " , ";
-                    }
+                    da.Fill(dsReturn);
+
                 }
-
-                dsReturn.P_SELECT_COMMAND = da.SelectCommand.CommandText;
-                dsReturn.P_PARAMETERS = strParam.Length > 0 ? strParam.Substring(0, strParam.Length - 2) : "";
-#endif
-
-
-            }
-            finally
-            {
-                if (con != null)
-                {
-                    if (con.State == ConnectionState.Open)
-                        con.Close();
-                    con.Dispose();
-                }
-                if (cmd != null) cmd.Dispose();
-                if (da != null) da.Dispose();
             }
 
             return dsReturn;
@@ -781,88 +530,27 @@ namespace DBHandler
         /// <returns>DataTable</returns>
         public static DataTable GetDataTable(string pStrConnectionString, int commandTimeout, string commandText, OracleParameter[] oraParameters, CommandType commandType)
         {
-            OracleConnection con = null;
-            OracleCommand cmd = null;
-            OracleDataAdapter da = null;
-#if PTC
-            clsDataSet dsReturn = null;
-#else
-            DataTable dtReturn = null;
-#endif
+            WriteDebugCommand(commandText, oraParameters);
 
+            DataTable dtReturn = new DataTable();
 
-
-            try
+            using (OracleConnection con = new OracleConnection(pStrConnectionString))
+            using (OracleCommand cmd = new OracleCommand())
             {
-                #region JSBANG
-                string strData = commandText + " : ";
+                ConfigureCommand(cmd, commandText, commandType, commandTimeout, oraParameters);
 
-                if (oraParameters != null)
+                if (m_SQLTraceMode.Equals("on"))
                 {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        strData += " , " + string.Format("{0}", param.Value);
-                    }
-                }
-                System.Diagnostics.Debug.WriteLine(strData);
-                #endregion
-
-                cmd = new OracleCommand();
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-                //cmd.InitialLONGFetchSize = -1; 
-
-                if (oraParameters != null)
-                {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
+                    SQLTrace(m_SQLTracePath, cmd, true);
                 }
 
-                if (m_SQLTraceMode.Equals("on")) SQLTrace(m_SQLTracePath, cmd, true);
-
-                con = new OracleConnection(pStrConnectionString);
                 con.Open();
-
                 cmd.Connection = con;
 
-#if PTC
-                dsReturn = new clsDataSet();
-#else
-                dtReturn = new DataTable();
-#endif
-                da = new OracleDataAdapter(cmd);
-                da.Fill(dtReturn);
-
-#if PTC
-                string strParam = "";
-
-                foreach (OracleParameter param in da.SelectCommand.Parameters)
+                using (OracleDataAdapter da = new OracleDataAdapter(cmd))
                 {
-                    if (param.OracleType != OracleType.Cursor)
-                    {
-                        strParam += param.Value.ToString() + " , ";
-                    }
+                    da.Fill(dtReturn);
                 }
-
-                dsReturn.P_SELECT_COMMAND = da.SelectCommand.CommandText;
-                dsReturn.P_PARAMETERS = strParam.Length > 0 ? strParam.Substring(0, strParam.Length - 2) : "";
-#endif
-
-
-            }
-            finally
-            {
-                if (con != null)
-                {
-                    if (con.State == ConnectionState.Open)
-                        con.Close();
-                    con.Dispose();
-                }
-                if (cmd != null) cmd.Dispose();
-                if (da != null) da.Dispose();
             }
 
             return dtReturn;
@@ -926,52 +614,100 @@ namespace DBHandler
         {
             OracleConnection con = null;
             OracleCommand cmd = null;
-            OracleDataReader dr = null;
-
 
             try
             {
-                #region JSBANG
-                string strData = commandText + " : ";
-                if (oraParameters != null)
-                {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        strData += " , " + string.Format("{0}", param.Value);
-                    }
-                }
-                System.Diagnostics.Debug.WriteLine(strData);
-                #endregion
-
-                cmd = new OracleCommand();
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-
-                if (oraParameters != null)
-                {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
-                }
-
-                if (m_SQLTraceMode.Equals("on")) SQLTrace(m_SQLTracePath, cmd, true);
+                WriteDebugCommand(commandText, oraParameters);
 
                 con = new OracleConnection(p_strConnectionString);
                 con.Open();
 
-                cmd.Connection = con;
-                dr = cmd.ExecuteReader(CommandBehavior.CloseConnection);
+                cmd = con.CreateCommand();
+                ConfigureCommand(cmd, commandText, commandType, commandTimeout, oraParameters);
 
+                if (m_SQLTraceMode.Equals("on"))
+                {
+                    SQLTrace(m_SQLTracePath, cmd, true);
+                }
+
+                // 호출자는 반환된 OracleDataReader를 반드시 Dispose/Close해야 한다.
+                // CloseConnection에 의해 Reader 종료 시 Connection도 닫힌다.
+                return cmd.ExecuteReader(CommandBehavior.CloseConnection);
+            }
+            catch
+            {
+                if (cmd != null)
+                {
+                    cmd.Dispose();
+                }
+
+                if (con != null)
+                {
+                    con.Dispose();
+                }
+
+                throw;
             }
             finally
             {
-                //if(con != null) con.Dispose();
-                if (cmd != null) cmd.Dispose();
+                // Reader가 반환된 뒤에도 Reader가 Command를 사용할 수 있으므로
+                // 성공 경로에서는 Command를 여기서 Dispose하지 않는다.
+                // Connection은 CommandBehavior.CloseConnection으로 Reader 종료 시 정리된다.
+            }
+        }
+
+        #endregion
+
+        #region ==== Command Helpers ====
+
+        private static void ConfigureCommand(
+            OracleCommand cmd,
+            string commandText,
+            CommandType commandType,
+            int commandTimeout,
+            OracleParameter[] oraParameters)
+        {
+            if (cmd == null)
+                throw new ArgumentNullException(nameof(cmd));
+
+            if (string.IsNullOrWhiteSpace(commandText))
+                throw new ArgumentException("CommandText is required.", nameof(commandText));
+
+            cmd.BindByName = true;
+            cmd.CommandText = commandText;
+            cmd.CommandType = commandType;
+            cmd.CommandTimeout = commandTimeout;
+
+            if (oraParameters == null)
+                return;
+
+            foreach (OracleParameter param in oraParameters)
+            {
+                if (param == null)
+                    throw new ArgumentException("Parameter array contains null.", nameof(oraParameters));
+
+                AddParameter(cmd, param);
+            }
+        }
+
+        private static void WriteDebugCommand(
+            string commandText,
+            OracleParameter[] oraParameters)
+        {
+            string strData = (commandText ?? string.Empty) + " : ";
+
+            if (oraParameters != null)
+            {
+                foreach (OracleParameter param in oraParameters)
+                {
+                    strData += " , " +
+                        string.Format(
+                            "{0}",
+                            param == null ? null : param.Value);
+                }
             }
 
-            return dr;
+            System.Diagnostics.Debug.WriteLine(strData);
         }
 
         #endregion
@@ -986,11 +722,7 @@ namespace DBHandler
             oBuilder.Append("\r\n");
             oBuilder.Append(cmd.CommandText);
 
-            if (cmd.Parameters.Count == 0)
-            {
-                oBuilder.Append(cmd.CommandText);
-            }
-            else
+            if (cmd.Parameters.Count != 0)
             {
                 if (cmd.CommandType == CommandType.Text)
                 {
@@ -1025,8 +757,15 @@ namespace DBHandler
         #region ==== AddParameter ====
         private static void AddParameter(OracleCommand cmd, OracleParameter param)
         {
-            if ((param.Value == null) || ((param.Value.GetType().ToString().Equals("System.String")) && ((string)param.Value).Length == 0))
-                param.Value = System.DBNull.Value;
+            if (param == null)
+                throw new ArgumentNullException(nameof(param));
+
+            if (param.Value == null ||
+                (param.Value is string && ((string)param.Value).Length == 0))
+            {
+                param.Value = DBNull.Value;
+            }
+
             cmd.Parameters.Add(param);
         }
         #endregion
@@ -1047,7 +786,8 @@ namespace DBHandler
                         case OracleDbType.Char:
                         case OracleDbType.Varchar2:
                         case OracleDbType.NChar:
-                            strReturn = string.Concat("'", (string)parameterValue, "'");
+                        case OracleDbType.NVarchar2:
+                            strReturn = string.Concat("'", parameterValue.ToString().Replace("'", "''"), "'");
                             break;
                         case OracleDbType.BFile:
                             strReturn = "<OracleBFile>";
@@ -1070,9 +810,6 @@ namespace DBHandler
                         case OracleDbType.Byte:
                             strReturn = "<Binary>";
                             break;
-                        //						case OracleType.Cursor:
-                        //							strReturn = "<OracleCursor>";
-                        //							break;
                         default:
                             strReturn = parameterValue.ToString();
                             break;
@@ -1091,7 +828,7 @@ namespace DBHandler
     /// <summary>
     /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// </summary>
-    public class OracleDbAgent
+    public class OracleDbAgent : IDisposable
     {
         // Member Variables
         protected OracleConnection m_DBCon;
@@ -1104,7 +841,6 @@ namespace DBHandler
         protected int m_nRows;
         protected string m_strSQL;
         protected string m_strRET;
-        protected string m_strOraErr = "ORA";
 
 
         public int COMMAND_TIMEOUT = 30;
@@ -1135,40 +871,36 @@ namespace DBHandler
         /// <returns>DB 커넥션 상태</returns>
         public bool DBConnectState()
         {
-            bool bConnStat = false;
-            if (m_DBCon == null || m_DBCon.State.ToString() == "Closed") return false;
+            if (!IsConnected())
+                return false;
 
             try
             {
-
-                string sDate = "";
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = "SELECT TO_CHAR(SYSDATE, 'YYYYMMDD') FROM DUAL";
-                m_DataReader = m_DBCmd.ExecuteReader();
-                while (m_DataReader.Read())
+                using (OracleCommand cmd = CreateCommand(
+                    "SELECT 1 FROM DUAL",
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
                 {
-                    sDate = m_DataReader[0].ToString();
-                    bConnStat = true;
-                    break;
+                    object result = cmd.ExecuteScalar();
+                    return result != null && result != DBNull.Value;
                 }
             }
             catch (Exception e)
             {
                 System.Diagnostics.Debug.WriteLine(e.Message);
-                bConnStat = false;
-            }
-            finally
-            {
-                m_DBCmd.Dispose();
-                if (m_DataReader != null)
-                    m_DataReader.Dispose();
-                if (!bConnStat)
+
+                try
+                {
                     DBDisConnect();
+                }
+                catch (Exception disconnectException)
+                {
+                    System.Diagnostics.Debug.WriteLine(disconnectException.Message);
+                }
+
+                return false;
             }
-
-
-            return bConnStat;
         }
         #endregion
 
@@ -1180,21 +912,24 @@ namespace DBHandler
         /// <returns></returns>
         public bool DBConnect(string p_strConnectionString)
         {
+            if (string.IsNullOrWhiteSpace(p_strConnectionString))
+                throw new ArgumentException("Connection string is required.", nameof(p_strConnectionString));
+
+            DBDisConnect();
+
             try
             {
                 m_DBCon = new OracleConnection(p_strConnectionString);
                 m_DBCon.Open();
-
-                //				m_DBCmd		= m_DBCon.CreateCommand();
                 m_DBTrans = m_DBCon.BeginTransaction();
-                //				m_DBCmd.Transaction = m_DBTrans;
-            }
-            catch (Exception e)
-            {
-                throw e;
-            }
 
-            return true;
+                return true;
+            }
+            catch
+            {
+                CleanupConnection();
+                throw;
+            }
         }
 
         /// <summary>
@@ -1208,21 +943,17 @@ namespace DBHandler
         {
             try
             {
-                m_DBCon = new OracleConnection("Pooling=false;user id		= " + p_strUSER + ";" +
-                    "data source	= " + p_strAlias + ";" +
-                    "password		= " + p_strPW);
-                m_DBCon.Open();
+                string connectionString = BuildAgentConnectionString(
+                    p_strUSER,
+                    p_strPW,
+                    p_strAlias);
 
-                //				m_DBCmd		= m_DBCon.CreateCommand();
-                m_DBTrans = m_DBCon.BeginTransaction();
-                //				m_DBCmd.Transaction = m_DBTrans;
+                return DBConnect(connectionString);
             }
             catch
             {
                 return false;
             }
-
-            return true;
         }
 
 
@@ -1243,22 +974,21 @@ namespace DBHandler
         {
             try
             {
-                m_DBCon = new OracleConnection("Pooling=false;user id		= " + p_strUSER + ";" +
-                    "data source	= " + p_strAlias + ";" +
-                    "password		= " + p_strPW);
-                m_DBCon.Open();
+                string connectionString = BuildAgentConnectionString(
+                    p_strUSER,
+                    p_strPW,
+                    p_strAlias);
 
-                //				m_DBCmd		= m_DBCon.CreateCommand();
-                m_DBTrans = m_DBCon.BeginTransaction();
-                //				m_DBCmd.Transaction = m_DBTrans;
+                DBConnect(connectionString);
+
+                SetSuccess(ref p_strErrCode, ref p_strErrText);
+                return true;
             }
             catch (Exception e)
             {
                 GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
                 return false;
             }
-
-            return true;
         }
 
 
@@ -1267,17 +997,19 @@ namespace DBHandler
         /// </summary>
         public void DBDisConnect()
         {
-            try
+            DisposeCurrentReader();
+            DisposeCurrentCommand();
+
+            if (m_DBTrans != null)
             {
                 m_DBTrans.Dispose();
-                //				if ( m_DBCon.State == ConnectionState.Open )	
-                m_DBCon.Close();
+                m_DBTrans = null;
             }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine(e.Message);
-                throw e;
 
+            if (m_DBCon != null)
+            {
+                m_DBCon.Dispose();
+                m_DBCon = null;
             }
         }
 
@@ -1292,16 +1024,15 @@ namespace DBHandler
         {
             try
             {
-                m_DBTrans.Dispose();
-                if (m_DBCon.State == ConnectionState.Open) m_DBCon.Close();
+                DBDisConnect();
+                SetSuccess(ref p_strErrCode, ref p_strErrText);
+                return true;
             }
             catch (Exception e)
             {
                 GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
                 return false;
             }
-
-            return true;
         }
 
         #endregion
@@ -1312,16 +1043,11 @@ namespace DBHandler
         /// </summary>
         public void Commit()
         {
-            try
-            {
-                m_DBTrans.Commit();
-                m_DBTrans = m_DBCon.BeginTransaction();
-            }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine(e.Message);
-                throw e;
-            }
+            EnsureTransaction();
+
+            m_DBTrans.Commit();
+            m_DBTrans.Dispose();
+            m_DBTrans = m_DBCon.BeginTransaction();
         }
 
 
@@ -1335,16 +1061,15 @@ namespace DBHandler
         {
             try
             {
-                m_DBTrans.Commit();
-                m_DBTrans = m_DBCon.BeginTransaction();
+                Commit();
+                SetSuccess(ref p_strErrCode, ref p_strErrText);
+                return true;
             }
             catch (Exception e)
             {
                 GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
                 return false;
             }
-
-            return true;
         }
 
 
@@ -1353,16 +1078,11 @@ namespace DBHandler
         /// </summary>
         public void RollBack()
         {
-            try
-            {
-                m_DBTrans.Rollback();
-                m_DBTrans = m_DBCon.BeginTransaction();
-            }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine(e.Message);
-                throw e;
-            }
+            EnsureTransaction();
+
+            m_DBTrans.Rollback();
+            m_DBTrans.Dispose();
+            m_DBTrans = m_DBCon.BeginTransaction();
         }
 
 
@@ -1376,16 +1096,15 @@ namespace DBHandler
         {
             try
             {
-                m_DBTrans.Rollback();
-                m_DBTrans = m_DBCon.BeginTransaction();
+                RollBack();
+                SetSuccess(ref p_strErrCode, ref p_strErrText);
+                return true;
             }
             catch (Exception e)
             {
                 GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
                 return false;
             }
-
-            return true;
         }
         #endregion
 
@@ -1398,16 +1117,17 @@ namespace DBHandler
         /// <param name="p_strErrText">ErrorText(out)</param>
         public void GetErrorCode(Exception e, ref string p_strErrCode, ref string p_strErrText)
         {
-            if (e.Message.Substring(0, 3) == m_strOraErr)
+            OracleException oracleException = e as OracleException;
+
+            if (oracleException != null)
             {
-                p_strErrCode = "O" + e.Message.Substring(4, 5);
-                p_strErrText = e.Message.Substring(10);
+                p_strErrCode = "O" + Math.Abs(oracleException.Number).ToString("D5");
+                p_strErrText = oracleException.Message;
+                return;
             }
-            else
-            {
-                p_strErrCode = "AC7901";
-                p_strErrText = e.Message;
-            }
+
+            p_strErrCode = "AC7901";
+            p_strErrText = e == null ? string.Empty : e.Message;
         }
 
         /// <summary>
@@ -1463,6 +1183,153 @@ namespace DBHandler
         }
         #endregion
 
+        #region Internal Helpers
+        private bool IsConnected()
+        {
+            return m_DBCon != null &&
+                m_DBCon.State == ConnectionState.Open;
+        }
+
+        private void EnsureConnected()
+        {
+            if (!IsConnected())
+            {
+                throw new InvalidOperationException(
+                    "Oracle database is not connected.");
+            }
+        }
+
+        private void EnsureTransaction()
+        {
+            EnsureConnected();
+
+            if (m_DBTrans == null)
+            {
+                throw new InvalidOperationException(
+                    "Oracle transaction is not active.");
+            }
+        }
+
+        private OracleCommand CreateCommand(
+            string commandText,
+            CommandType commandType,
+            int commandTimeout,
+            OracleParameter[] oraParameters)
+        {
+            EnsureConnected();
+
+            if (string.IsNullOrWhiteSpace(commandText))
+            {
+                throw new ArgumentException(
+                    "CommandText is required.",
+                    nameof(commandText));
+            }
+
+            OracleCommand cmd = m_DBCon.CreateCommand();
+
+            try
+            {
+                cmd.BindByName = true;
+                cmd.CommandText = commandText;
+                cmd.CommandType = commandType;
+                cmd.CommandTimeout = commandTimeout;
+
+                if (m_DBTrans != null)
+                {
+                    cmd.Transaction = m_DBTrans;
+                }
+
+                if (oraParameters != null)
+                {
+                    foreach (OracleParameter param in oraParameters)
+                    {
+                        if (param == null)
+                        {
+                            throw new ArgumentException(
+                                "Parameter array contains null.",
+                                nameof(oraParameters));
+                        }
+
+                        AddParameter(cmd, param);
+                    }
+                }
+
+                return cmd;
+            }
+            catch
+            {
+                cmd.Dispose();
+                throw;
+            }
+        }
+
+        private static string BuildAgentConnectionString(
+            string user,
+            string password,
+            string alias)
+        {
+            return "Pooling=false;user id=" + (user ?? string.Empty) + ";" +
+                "data source=" + (alias ?? string.Empty) + ";" +
+                "password=" + (password ?? string.Empty);
+        }
+
+        private static void SetSuccess(
+            ref string p_strErrCode,
+            ref string p_strErrText)
+        {
+            p_strErrCode = OracleDBDef.ORAMID_GOOD;
+            p_strErrText = string.Empty;
+        }
+
+        private void DisposeCurrentReader()
+        {
+            if (m_DataReader != null)
+            {
+                m_DataReader.Dispose();
+                m_DataReader = null;
+            }
+
+            if (m_DataReader1 != null)
+            {
+                m_DataReader1.Dispose();
+                m_DataReader1 = null;
+            }
+        }
+
+        private void DisposeCurrentCommand()
+        {
+            if (m_DBCmd != null)
+            {
+                m_DBCmd.Dispose();
+                m_DBCmd = null;
+            }
+        }
+
+        private void CleanupConnection()
+        {
+            DisposeCurrentReader();
+            DisposeCurrentCommand();
+
+            if (m_DBTrans != null)
+            {
+                m_DBTrans.Dispose();
+                m_DBTrans = null;
+            }
+
+            if (m_DBCon != null)
+            {
+                m_DBCon.Dispose();
+                m_DBCon = null;
+            }
+        }
+
+        public void Dispose()
+        {
+            DBDisConnect();
+            GC.SuppressFinalize(this);
+        }
+        #endregion
+
         #region[ExecuteNonQuery]
         /// <summary>
         /// SQL 문을 실행한다
@@ -1488,41 +1355,14 @@ namespace DBHandler
         /// <returns></returns>
         public int ExecuteNonQuery(int commandTimeout, string commandText, OracleParameter[] oraParameters, CommandType commandType)
         {
-            int iReturn = 0;
-
-            //OracleConnection con = null;
-            //OracleCommand cmd = null;
-
-            try
+            using (OracleCommand cmd = CreateCommand(
+                commandText,
+                commandType,
+                commandTimeout,
+                oraParameters))
             {
-
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandText = commandText;
-                m_DBCmd.CommandType = commandType;
-                m_DBCmd.CommandTimeout = commandTimeout;
-                m_DBCmd.Transaction = m_DBTrans;
-
-                if (oraParameters != null)
-                {
-                    foreach (OracleParameter param in oraParameters)
-                    {
-                        AddParameter(m_DBCmd, param);
-                    }
-                }
-
-
-                iReturn = m_DBCmd.ExecuteNonQuery();
+                return cmd.ExecuteNonQuery();
             }
-            catch (Exception e)
-            {
-                throw e;
-            }
-            finally
-            {
-                if (m_DBCmd != null) m_DBCmd.Dispose();
-            }
-
-            return iReturn;
         }
         #endregion
 
@@ -1538,28 +1378,30 @@ namespace DBHandler
         {
             try
             {
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = p_strSQL;
-                m_nRows = m_DBCmd.ExecuteNonQuery();
+                using (OracleCommand cmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
+                {
+                    m_nRows = cmd.ExecuteNonQuery();
+                }
 
                 if (m_nRows == 0)
                 {
                     p_strErrCode = OracleDBDef.ORAMID_NOFOUND;
+                    p_strErrText = string.Empty;
                     return false;
                 }
+
+                SetSuccess(ref p_strErrCode, ref p_strErrText);
+                return true;
             }
             catch (Exception e)
             {
                 GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
                 return false;
             }
-            finally
-            {
-                m_DBCmd.Dispose();
-            }
-
-            return true;
         }
         /// <summary>
         /// SQL문을 실행합니다.
@@ -1612,21 +1454,30 @@ namespace DBHandler
         {
             try
             {
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = p_strSQL;
+                EnsureConnected();
+
+                DisposeCurrentReader();
+                DisposeCurrentCommand();
+
+                m_DBCmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null);
+
                 m_DataReader = m_DBCmd.ExecuteReader();
 
+                SetSuccess(ref p_strErrCode, ref p_strErrText);
                 return m_DataReader;
             }
             catch (Exception e)
             {
                 GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+
+                DisposeCurrentReader();
+                DisposeCurrentCommand();
+
                 return null;
-            }
-            finally
-            {
-                m_DBCmd.Dispose();
             }
         }
         /// <summary>
@@ -1663,52 +1514,54 @@ namespace DBHandler
 
         #endregion
 
-        #region OraAgent : public bool ExecuteScalar(string p_strSQL, ref int p_nValue, ref string p_strErrCode, ref string p_strErrText)
+        #region OraAgent : ExecuteScalar int / long
         /// <summary>
-        /// SQL문을 실행합니다.
+        /// SQL문을 실행하고 int 값을 반환합니다.
         /// </summary>
         /// <param name="p_strSQL">SQL문</param>
         /// <param name="p_nValue">int Value(out)</param>
         /// <param name="p_strErrCode">Error Code(out)</param>
         /// <param name="p_strErrText">Error Text(out)</param>
-        /// <returns></returns>
+        /// <returns>성공여부</returns>
         public bool ExecuteScalar(string p_strSQL, ref int p_nValue, ref string p_strErrCode, ref string p_strErrText)
         {
             try
             {
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = p_strSQL;
-
-                //p_nValue = MES.FW.Common.Util.StringToInt(m_DBCmd.ExecuteScalar().ToString());
-                string strValue = m_DBCmd.ExecuteScalar().ToString();
-
-                if (strValue != null && strValue != "")
+                using (OracleCommand cmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
                 {
-                    try
-                    {
-                        p_nValue = int.Parse(strValue);
-                    }
-                    catch
+                    object value = cmd.ExecuteScalar();
+
+                    if (value == null || value == DBNull.Value)
                     {
                         p_nValue = 0;
                     }
+                    else
+                    {
+                        int parsedValue;
+                        p_nValue = int.TryParse(
+                            value.ToString(),
+                            out parsedValue)
+                                ? parsedValue
+                                : 0;
+                    }
                 }
 
+                SetSuccess(ref p_strErrCode, ref p_strErrText);
+                return true;
             }
             catch (Exception e)
             {
                 GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
                 return false;
             }
-            finally
-            {
-                m_DBCmd.Dispose();
-            }
-            return true;
         }
+
         /// <summary>
-        /// SQL문을 실행합니다.
+        /// SQL문을 실행하고 long 값을 반환합니다.
         /// </summary>
         /// <param name="p_strSQL">SQL문</param>
         /// <param name="p_lgValue">long Value(out)</param>
@@ -1717,17 +1570,45 @@ namespace DBHandler
         /// <returns>성공여부</returns>
         public bool ExecuteScalar(string p_strSQL, ref long p_lgValue, ref string p_strErrCode, ref string p_strErrText)
         {
-            int nVal = 0;
-            if (!ExecuteScalar(p_strSQL, ref nVal, ref p_strErrCode, ref p_strErrText)) return false;
-            p_lgValue = nVal;
+            try
+            {
+                using (OracleCommand cmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
+                {
+                    object value = cmd.ExecuteScalar();
 
-            return true;
+                    if (value == null || value == DBNull.Value)
+                    {
+                        p_lgValue = 0L;
+                    }
+                    else
+                    {
+                        long parsedValue;
+                        p_lgValue = long.TryParse(
+                            value.ToString(),
+                            out parsedValue)
+                                ? parsedValue
+                                : 0L;
+                    }
+                }
+
+                SetSuccess(ref p_strErrCode, ref p_strErrText);
+                return true;
+            }
+            catch (Exception e)
+            {
+                GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+                return false;
+            }
         }
         #endregion
 
-        #region OraAgent : public bool ExecuteScalar(string p_strSQL, ref string p_strValue, ref string p_strErrCode, ref string p_strErrText)
+        #region OraAgent : ExecuteScalar string
         /// <summary>
-        /// SQL문을 실행합니다.
+        /// SQL문을 실행하고 string 값을 반환합니다.
         /// </summary>
         /// <param name="p_strSQL">SQL문</param>
         /// <param name="p_strValue">string Value(out)</param>
@@ -1738,40 +1619,43 @@ namespace DBHandler
         {
             try
             {
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = p_strSQL;
-
-                if (m_DBCmd.ExecuteScalar() != null)
+                using (OracleCommand cmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
                 {
-                    p_strValue = m_DBCmd.ExecuteScalar().ToString();
-                }
-                else
-                {
-                    p_strValue = "";
+                    object value = cmd.ExecuteScalar();
+
+                    p_strValue =
+                        value == null || value == DBNull.Value
+                            ? string.Empty
+                            : value.ToString();
                 }
 
+                SetSuccess(ref p_strErrCode, ref p_strErrText);
+                return true;
             }
             catch (Exception e)
             {
                 GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
                 return false;
             }
-            finally
-            {
-                m_DBCmd.Dispose();
-            }
-
-            return true;
         }
         #endregion
-
 
         #region ==== AddParameter ====
         private void AddParameter(OracleCommand cmd, OracleParameter param)
         {
-            if ((param.Value == null) || ((param.Value.GetType().ToString().Equals("System.String")) && ((string)param.Value).Length == 0))
-                param.Value = System.DBNull.Value;
+            if (param == null)
+                throw new ArgumentNullException(nameof(param));
+
+            if (param.Value == null ||
+                (param.Value is string && ((string)param.Value).Length == 0))
+            {
+                param.Value = DBNull.Value;
+            }
+
             cmd.Parameters.Add(param);
         }
         #endregion

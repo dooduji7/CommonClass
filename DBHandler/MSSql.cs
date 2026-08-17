@@ -28,10 +28,6 @@ namespace DBHandler
         private static string m_Pass = "";
         private static string m_Alias = "";
 
-        private static string m_strID = "";
-        private static string m_strPW = "";
-        private static string m_strIP = "";
-        private static string m_strDB = "";
 
         private static SqlConnection m_SqlConnection = null;
         private static SqlTransaction m_SqlTransaction = null;
@@ -63,6 +59,87 @@ namespace DBHandler
         }
         #endregion
 
+        #region[Parameter Helpers]
+        private static SqlParameter[] CreateInputParameters(
+            string strID,
+            string strVAL,
+            char split)
+        {
+            if (string.IsNullOrWhiteSpace(strID))
+                return null;
+
+            string[] paramIds = strID.Split(split);
+            string[] paramValues = (strVAL ?? string.Empty).Split(split);
+
+            if (paramIds.Length != paramValues.Length)
+            {
+                throw new ArgumentException(
+                    "Parameter 이름과 값의 개수가 일치하지 않습니다.");
+            }
+
+            SqlParameter[] parameters =
+                new SqlParameter[paramIds.Length];
+
+            for (int i = 0; i < paramIds.Length; i++)
+            {
+                parameters[i] =
+                    new SqlParameter(paramIds[i], paramValues[i]);
+
+                parameters[i].Direction =
+                    ParameterDirection.Input;
+            }
+
+            return parameters;
+        }
+
+        private static SqlParameter[] CreateProcedureResultParameters(
+            string strID,
+            string strVAL,
+            char split)
+        {
+            if (string.IsNullOrWhiteSpace(strID))
+            {
+                throw new ArgumentException(
+                    "Output Parameter 정보가 필요합니다.",
+                    nameof(strID));
+            }
+
+            string[] paramIds = strID.Split(split);
+            string[] paramValues = (strVAL ?? string.Empty).Split(split);
+
+            if (paramIds.Length != paramValues.Length)
+            {
+                throw new ArgumentException(
+                    "Parameter 이름과 값의 개수가 일치하지 않습니다.");
+            }
+
+            SqlParameter[] parameters =
+                new SqlParameter[paramIds.Length];
+
+            int lastIndex = paramIds.Length - 1;
+
+            for (int i = 0; i < lastIndex; i++)
+            {
+                parameters[i] =
+                    new SqlParameter(paramIds[i], paramValues[i]);
+
+                parameters[i].Direction =
+                    ParameterDirection.Input;
+            }
+
+            parameters[lastIndex] =
+                new SqlParameter(
+                    paramIds[lastIndex],
+                    SqlDbType.VarChar,
+                    500);
+
+            parameters[lastIndex].Direction =
+                ParameterDirection.Output;
+
+            return parameters;
+        }
+        #endregion
+
         #region[ExecuteProcedure]
         /// <summary>
         /// 오라클 DB 프로시져 실행
@@ -72,70 +149,17 @@ namespace DBHandler
         /// <param name="strVAL">파라미터 값</param>
         public static void ExecuteProcedure(string strSpName, string strID, string strVAL)
         {
-            try
-            {
-                string[] strParamID = null;
-                string[] strParamVAL = null;
-
-                if (strID.Trim().Length != 0)
-                {
-                    strParamID = strID.Split('@');
-                    strParamVAL = strVAL.Split('@');
-
-                    SqlParameter[] Params = new SqlParameter[strParamID.Length];
-
-
-                    for (int i = 0; i < strParamID.Length; i++)
-                    {
-                        Params[i] = new SqlParameter(strParamID[i], strParamVAL[i]);
-                        Params[i].Direction = ParameterDirection.Input;
-                    }
-                    MSSQLDbAccess.Execute(strSpName, Params, CommandType.StoredProcedure);
-                }
-                else
-                {
-                    MSSQLDbAccess.Execute(strSpName, null, CommandType.StoredProcedure);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                System.Diagnostics.Debug.WriteLine(ex.StackTrace);
-                throw;
-            }
+            ExecuteProcedure(strSpName, strID, strVAL, '@');
         }
         public static void ExecuteProcedure(string strSpName, string strID, string strVAL, char split)
         {
-            try
-            {
-                string[] strParamID = null;
-                string[] strParamVAL = null;
+            SqlParameter[] parameters =
+                CreateInputParameters(strID, strVAL, split);
 
-                if (strID.Trim().Length != 0)
-                {
-                    strParamID = strID.Split(split);
-                    strParamVAL = strVAL.Split(split);
-
-                    SqlParameter[] Params = new SqlParameter[strParamID.Length];
-
-                    for (int i = 0; i < strParamID.Length; i++)
-                    {
-                        Params[i] = new SqlParameter(strParamID[i], strParamVAL[i]);
-                        Params[i].Direction = ParameterDirection.Input;
-                    }
-                    MSSQLDbAccess.Execute(strSpName, Params, CommandType.StoredProcedure);
-                }
-                else
-                {
-                    MSSQLDbAccess.Execute(strSpName, null, CommandType.StoredProcedure);
-                }
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                System.Diagnostics.Debug.WriteLine(ex.StackTrace);
-                throw;
-            }
+            Execute(
+                strSpName,
+                parameters,
+                CommandType.StoredProcedure);
         }
 
         #endregion
@@ -150,135 +174,33 @@ namespace DBHandler
         /// <returns></returns>
         public static string ExecuteProcedureResult(string strSpName, string strID, string strVAL)
         {
-            if (string.IsNullOrWhiteSpace(strID))
-            {
-                throw new ArgumentException(
-                    "Output Parameter 정보가 필요합니다.",
-                    nameof(strID));
-            }
-
-            string strError = string.Empty;
-
-            try
-            {
-                string[] strParamID = strID.Split('@');
-                string[] strParamVAL = strVAL.Split('@');
-
-                if (strParamID.Length != strParamVAL.Length)
-                {
-                    throw new ArgumentException(
-                        "Parameter 이름과 값의 개수가 일치하지 않습니다.");
-                }
-
-                SqlParameter[] Params =
-                    new SqlParameter[strParamID.Length];
-
-                int i;
-
-                // 마지막 Parameter는 Output Parameter이므로
-                // 그 이전까지 Input Parameter로 구성
-                for (i = 0; i < strParamID.Length - 1; i++)
-                {
-                    Params[i] = new SqlParameter(
-                        strParamID[i],
-                        strParamVAL[i]);
-
-                    Params[i].Direction =
-                        ParameterDirection.Input;
-                }
-
-                // 마지막 Parameter = Output
-                Params[i] = new SqlParameter(
-                    strParamID[i],
-                    SqlDbType.VarChar,
-                    500);
-
-                Params[i].Direction =
-                    ParameterDirection.Output;
-
-                MSSQLDbAccess.ExecuteScalar(
-                    strSpName,
-                    Params,
-                    CommandType.StoredProcedure);
-
-                if (Params[i].Value != null &&
-                    Params[i].Value != DBNull.Value)
-                {
-                    strError =
-                        Params[i].Value.ToString().Trim();
-                }
-
-                return strError;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                System.Diagnostics.Debug.WriteLine(ex.StackTrace);
-                throw;
-            }
+            return ExecuteProcedureResult(
+                strSpName,
+                strID,
+                strVAL,
+                '@');
         }
 
         public static string ExecuteProcedureResult(string strSpName, string strID, string strVAL, char split)
         {
-            if (string.IsNullOrWhiteSpace(strID))
-            {
-                throw new ArgumentException(
-                    "Output Parameter 정보가 필요합니다.",
-                    nameof(strID));
-            }
+            SqlParameter[] parameters =
+                CreateProcedureResultParameters(
+                    strID,
+                    strVAL,
+                    split);
 
-            string strError = string.Empty;
+            int outputIndex = parameters.Length - 1;
 
-            try
-            {
-                string[] strParamID = strID.Split(split);
-                string[] strParamVAL = strVAL.Split(split);
+            ExecuteScalar(
+                strSpName,
+                parameters,
+                CommandType.StoredProcedure);
 
-                SqlParameter[] Params =
-                    new SqlParameter[strParamID.Length];
+            object value = parameters[outputIndex].Value;
 
-                int i;
-
-                // 마지막 Parameter를 제외하고 Input Parameter 구성
-                for (i = 0; i < strParamID.Length - 1; i++)
-                {
-                    Params[i] = new SqlParameter(
-                        strParamID[i],
-                        strParamVAL[i]);
-
-                    Params[i].Direction =
-                        ParameterDirection.Input;
-                }
-
-                // 마지막 Parameter = Output
-                Params[i] = new SqlParameter(
-                    strParamID[i],
-                    SqlDbType.VarChar,
-                    500);
-
-                Params[i].Direction =
-                    ParameterDirection.Output;
-
-                MSSQLDbAccess.ExecuteScalar(
-                    strSpName,
-                    Params,
-                    CommandType.StoredProcedure);
-
-                if (Params[i].Value != null &&
-                    Params[i].Value != DBNull.Value)
-                {
-                    strError =
-                        Params[i].Value.ToString().Trim();
-                }
-
-                return strError;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine(ex.Message);
-                System.Diagnostics.Debug.WriteLine(ex.StackTrace);
-                throw;
-            }
+            return value == null || value == DBNull.Value
+                ? string.Empty
+                : value.ToString().Trim();
         }
         #endregion
 
@@ -334,34 +256,18 @@ namespace DBHandler
         /// <returns>실행된 행의 수</returns>
         public static int Execute(string p_strConnectionString, int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
-            int iReturn = 0;
+            WriteDebugCommand(commandText, oraParameters);
 
-            string strData = commandText + " : ";
-
-            if (oraParameters != null)
-            {
-                foreach (SqlParameter param in oraParameters)
-                {
-                    strData += " , " + string.Format("{0}", param.Value);
-                }
-            }
-
-            System.Diagnostics.Debug.WriteLine(strData);
-
-            using (SqlConnection con = new SqlConnection(p_strConnectionString))
+            using (SqlConnection con =
+                new SqlConnection(p_strConnectionString))
             using (SqlCommand cmd = new SqlCommand())
             {
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-
-                if (oraParameters != null)
-                {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
-                }
+                ConfigureCommand(
+                    cmd,
+                    commandText,
+                    commandType,
+                    commandTimeout,
+                    oraParameters);
 
                 if (m_SQLTraceMode.Equals("on"))
                 {
@@ -369,13 +275,10 @@ namespace DBHandler
                 }
 
                 con.Open();
-
                 cmd.Connection = con;
 
-                iReturn = cmd.ExecuteNonQuery();
+                return cmd.ExecuteNonQuery();
             }
-
-            return iReturn;
         }
         #endregion
 
@@ -433,34 +336,18 @@ namespace DBHandler
         /// <returns>첫번째행 리턴</returns>
         public static object ExecuteScalar(string p_strConnectionString, int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
-            object oReturn = null;
+            WriteDebugCommand(commandText, oraParameters);
 
-            string strData = commandText + " : ";
-
-            if (oraParameters != null)
-            {
-                foreach (SqlParameter param in oraParameters)
-                {
-                    strData += " , " + string.Format("{0}", param.Value);
-                }
-            }
-
-            System.Diagnostics.Debug.WriteLine(strData);
-
-            using (SqlConnection con = new SqlConnection(p_strConnectionString))
+            using (SqlConnection con =
+                new SqlConnection(p_strConnectionString))
             using (SqlCommand cmd = new SqlCommand())
             {
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-
-                if (oraParameters != null)
-                {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
-                }
+                ConfigureCommand(
+                    cmd,
+                    commandText,
+                    commandType,
+                    commandTimeout,
+                    oraParameters);
 
                 if (m_SQLTraceMode.Equals("on"))
                 {
@@ -468,12 +355,10 @@ namespace DBHandler
                 }
 
                 con.Open();
-
                 cmd.Connection = con;
-                oReturn = cmd.ExecuteScalar();
-            }
 
-            return oReturn;
+                return cmd.ExecuteScalar();
+            }
         }
 
         #endregion
@@ -539,54 +424,51 @@ namespace DBHandler
             if (oraParameters == null)
                 throw new ArgumentNullException(nameof(oraParameters));
 
-            int iReturn = 0;
+            if (paramValues == null)
+                throw new ArgumentNullException(nameof(paramValues));
 
-            if (paramValues == null || paramValues.Length == 0)
-                return iReturn;
+            int rowCount = paramValues.GetLength(0);
+            int columnCount = paramValues.GetLength(1);
 
-            string strData = commandText + " : ";
-
-            foreach (SqlParameter param in oraParameters)
+            if (columnCount != oraParameters.Length)
             {
-                strData += " , " + string.Format("{0}", param.Value);
+                throw new ArgumentException(
+                    "Parameter 개수와 Value 열 개수가 일치하지 않습니다.",
+                    nameof(paramValues));
             }
 
-            System.Diagnostics.Debug.WriteLine(strData);
+            if (rowCount == 0)
+                return 0;
 
-            int iColumnCount = paramValues.GetUpperBound(1) + 1;
-            int iRowCount = paramValues.GetUpperBound(0) + 1;
+            WriteDebugCommand(commandText, oraParameters);
 
-            using (SqlConnection con = new SqlConnection(p_strConnectionString))
+            int affectedRows = 0;
+
+            using (SqlConnection con =
+                new SqlConnection(p_strConnectionString))
             using (SqlCommand cmd = new SqlCommand())
             {
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-
-                foreach (SqlParameter param in oraParameters)
-                {
-                    AddParameter(cmd, param);
-                }
+                ConfigureCommand(
+                    cmd,
+                    commandText,
+                    commandType,
+                    commandTimeout,
+                    oraParameters);
 
                 con.Open();
-
                 cmd.Connection = con;
                 cmd.Prepare();
 
-                for (int iRow = 0; iRow < iRowCount; iRow++)
+                for (int row = 0; row < rowCount; row++)
                 {
-                    for (int iCol = 0; iCol < iColumnCount; iCol++)
+                    for (int col = 0; col < columnCount; col++)
                     {
-                        string strValue = paramValues[iRow, iCol];
+                        string value = paramValues[row, col];
 
-                        if (string.IsNullOrEmpty(strValue))
-                        {
-                            cmd.Parameters[iCol].Value = DBNull.Value;
-                        }
-                        else
-                        {
-                            cmd.Parameters[iCol].Value = strValue;
-                        }
+                        cmd.Parameters[col].Value =
+                            string.IsNullOrEmpty(value)
+                                ? (object)DBNull.Value
+                                : value;
                     }
 
                     if (m_SQLTraceMode.Equals("on"))
@@ -594,14 +476,14 @@ namespace DBHandler
                         SQLTrace(
                             m_SQLTracePath,
                             cmd,
-                            iRow == iRowCount - 1);
+                            row == rowCount - 1);
                     }
 
-                    iReturn += cmd.ExecuteNonQuery();
+                    affectedRows += cmd.ExecuteNonQuery();
                 }
             }
 
-            return iReturn;
+            return affectedRows;
         }
 
         #endregion
@@ -685,19 +567,20 @@ namespace DBHandler
         {
             try
             {
-                using (SqlConnection con = new SqlConnection(strConnectionString))
-                using (SqlCommand cmd = new SqlCommand())
+                using (SqlConnection con =
+                    new SqlConnection(strConnectionString))
+                using (SqlCommand cmd = con.CreateCommand())
                 {
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandText = "SELECT 1";
+                    cmd.CommandTimeout = COMMAND_TIMEOUT;
+
                     con.Open();
 
-                    cmd.Connection = con;
-                    cmd.CommandType = CommandType.Text;
-                    cmd.CommandText = "SELECT dbo.GET_DATE()";
+                    object result = cmd.ExecuteScalar();
 
-                    using (SqlDataReader reader = cmd.ExecuteReader())
-                    {
-                        return reader.Read();
-                    }
+                    return result != null &&
+                        result != DBNull.Value;
                 }
             }
             catch (Exception e)
@@ -709,32 +592,20 @@ namespace DBHandler
 
         public static DataTable GetDataTable(string p_strConnectionString, int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
-            string strData = commandText + " : ";
+            WriteDebugCommand(commandText, oraParameters);
 
-            if (oraParameters != null)
-            {
-                foreach (SqlParameter param in oraParameters)
-                {
-                    strData += " , " + string.Format("{0}", param.Value);
-                }
-            }
+            DataTable dtReturn = new DataTable();
 
-            System.Diagnostics.Debug.WriteLine(strData);
-
-            using (SqlConnection con = new SqlConnection(p_strConnectionString))
+            using (SqlConnection con =
+                new SqlConnection(p_strConnectionString))
             using (SqlCommand cmd = new SqlCommand())
             {
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-
-                if (oraParameters != null)
-                {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
-                }
+                ConfigureCommand(
+                    cmd,
+                    commandText,
+                    commandType,
+                    commandTimeout,
+                    oraParameters);
 
                 if (m_SQLTraceMode.Equals("on"))
                 {
@@ -742,18 +613,16 @@ namespace DBHandler
                 }
 
                 con.Open();
-
                 cmd.Connection = con;
 
-                DataTable dtReturn = new DataTable();
-
-                using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+                using (SqlDataAdapter da =
+                    new SqlDataAdapter(cmd))
                 {
                     da.Fill(dtReturn);
                 }
-
-                return dtReturn;
             }
+
+            return dtReturn;
         }
 
 
@@ -768,32 +637,20 @@ namespace DBHandler
         /// <returns>dataset</returns>
         public static DataSet GetDataSet(string p_strConnectionString, int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
-            string strData = commandText + " : ";
+            WriteDebugCommand(commandText, oraParameters);
 
-            if (oraParameters != null)
-            {
-                foreach (SqlParameter param in oraParameters)
-                {
-                    strData += " , " + string.Format("{0}", param.Value);
-                }
-            }
+            DataSet dsReturn = new DataSet();
 
-            System.Diagnostics.Debug.WriteLine(strData);
-
-            using (SqlConnection con = new SqlConnection(p_strConnectionString))
+            using (SqlConnection con =
+                new SqlConnection(p_strConnectionString))
             using (SqlCommand cmd = new SqlCommand())
             {
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
-
-                if (oraParameters != null)
-                {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
-                }
+                ConfigureCommand(
+                    cmd,
+                    commandText,
+                    commandType,
+                    commandTimeout,
+                    oraParameters);
 
                 if (m_SQLTraceMode.Equals("on"))
                 {
@@ -801,18 +658,16 @@ namespace DBHandler
                 }
 
                 con.Open();
-
                 cmd.Connection = con;
 
-                DataSet dsReturn = new DataSet();
-
-                using (SqlDataAdapter da = new SqlDataAdapter(cmd))
+                using (SqlDataAdapter da =
+                    new SqlDataAdapter(cmd))
                 {
                     da.Fill(dsReturn);
                 }
-
-                return dsReturn;
             }
+
+            return dsReturn;
         }
 
         #endregion
@@ -876,43 +731,35 @@ namespace DBHandler
 
             try
             {
-                string strData = commandText + " : ";
-
-                if (oraParameters != null)
-                {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        strData += " , " + string.Format("{0}", param.Value);
-                    }
-                }
-
-                System.Diagnostics.Debug.WriteLine(strData);
+                WriteDebugCommand(commandText, oraParameters);
 
                 con = new SqlConnection(p_strConnectionString);
                 con.Open();
 
                 cmd = con.CreateCommand();
-                cmd.CommandText = commandText;
-                cmd.CommandType = commandType;
-                cmd.CommandTimeout = commandTimeout;
 
-                if (oraParameters != null)
-                {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        AddParameter(cmd, param);
-                    }
-                }
+                ConfigureCommand(
+                    cmd,
+                    commandText,
+                    commandType,
+                    commandTimeout,
+                    oraParameters);
 
                 if (m_SQLTraceMode.Equals("on"))
                 {
                     SQLTrace(m_SQLTracePath, cmd, true);
                 }
 
-                return cmd.ExecuteReader(CommandBehavior.CloseConnection);
+                return cmd.ExecuteReader(
+                    CommandBehavior.CloseConnection);
             }
             catch
             {
+                if (cmd != null)
+                {
+                    cmd.Dispose();
+                }
+
                 if (con != null)
                 {
                     con.Dispose();
@@ -922,11 +769,75 @@ namespace DBHandler
             }
             finally
             {
-                if (cmd != null)
+                // 기존 public API가 SqlDataReader만 반환하므로
+                // 성공 경로에서는 Reader 사용 중 Command를 유지한다.
+                // Connection은 Reader Close/Dispose 시 CloseConnection으로 닫힌다.
+            }
+        }
+
+        #endregion
+
+        #region ==== Command Helpers ====
+
+        private static void ConfigureCommand(
+            SqlCommand cmd,
+            string commandText,
+            CommandType commandType,
+            int commandTimeout,
+            SqlParameter[] parameters)
+        {
+            if (cmd == null)
+                throw new ArgumentNullException(nameof(cmd));
+
+            if (string.IsNullOrWhiteSpace(commandText))
+            {
+                throw new ArgumentException(
+                    "CommandText가 필요합니다.",
+                    nameof(commandText));
+            }
+
+            cmd.CommandText = commandText;
+            cmd.CommandType = commandType;
+            cmd.CommandTimeout = commandTimeout;
+
+            if (parameters == null)
+                return;
+
+            foreach (SqlParameter parameter in parameters)
+            {
+                if (parameter == null)
                 {
-                    cmd.Dispose();
+                    throw new ArgumentException(
+                        "Parameter 배열에 null 항목이 있습니다.",
+                        nameof(parameters));
+                }
+
+                AddParameter(cmd, parameter);
+            }
+        }
+
+        private static void WriteDebugCommand(
+            string commandText,
+            SqlParameter[] parameters)
+        {
+            string strData =
+                (commandText ?? string.Empty) + " : ";
+
+            if (parameters != null)
+            {
+                foreach (SqlParameter parameter in parameters)
+                {
+                    strData +=
+                        " , " +
+                        string.Format(
+                            "{0}",
+                            parameter == null
+                                ? null
+                                : parameter.Value);
                 }
             }
+
+            System.Diagnostics.Debug.WriteLine(strData);
         }
 
         #endregion
@@ -941,11 +852,7 @@ namespace DBHandler
             oBuilder.Append("\r\n");
             oBuilder.Append(cmd.CommandText);
 
-            if (cmd.Parameters.Count == 0)
-            {
-                oBuilder.Append(cmd.CommandText);
-            }
-            else
+            if (cmd.Parameters.Count != 0)
             {
                 if (cmd.CommandType == CommandType.Text)
                 {
@@ -980,8 +887,16 @@ namespace DBHandler
         #region ==== AddParameter ====
         private static void AddParameter(SqlCommand cmd, SqlParameter param)
         {
-            if ((param.Value == null) || ((param.Value.GetType().ToString().Equals("System.String")) && ((string)param.Value).Length == 0))
-                param.Value = System.DBNull.Value;
+            if (param == null)
+                throw new ArgumentNullException(nameof(param));
+
+            if (param.Value == null ||
+                (param.Value is string &&
+                 ((string)param.Value).Length == 0))
+            {
+                param.Value = DBNull.Value;
+            }
+
             cmd.Parameters.Add(param);
         }
         #endregion
@@ -1002,11 +917,12 @@ namespace DBHandler
                         case SqlDbType.Char:
                         case SqlDbType.VarChar:
                         case SqlDbType.NChar:
-                            strReturn = string.Concat("'", (string)parameterValue, "'");
+                        case SqlDbType.NVarChar:
+                            strReturn = string.Concat(
+                                "'",
+                                parameterValue.ToString().Replace("'", "''"),
+                                "'");
                             break;
-                        //case SqlDbType.BFile:
-                        //    strReturn = "<OracleBFile>";
-                        //    break;
                         //case SqlDbType.Blob:
                         //    strReturn = "<OracleBlob>";
                         //    break;
@@ -1025,9 +941,6 @@ namespace DBHandler
                         //case SqlDbType.Byte:
                         //    strReturn = "<Binary>";
                         //    break;
-                        //						case OracleType.Cursor:
-                        //							strReturn = "<OracleCursor>";
-                        //							break;
                         default:
                             strReturn = parameterValue.ToString();
                             break;
@@ -1040,36 +953,43 @@ namespace DBHandler
         #endregion
 
         #region transaction
-        public static bool BeginTransaction()
+        private static void CleanupTransaction()
         {
             if (m_SqlTransaction != null)
             {
-                return false;
+                m_SqlTransaction.Dispose();
+                m_SqlTransaction = null;
             }
+
+            if (m_SqlConnection != null)
+            {
+                m_SqlConnection.Dispose();
+                m_SqlConnection = null;
+            }
+        }
+
+        public static bool BeginTransaction()
+        {
+            if (m_SqlTransaction != null)
+                return false;
+
+            CleanupTransaction();
 
             try
             {
-                m_SqlConnection = new SqlConnection(strConnectionString);
+                m_SqlConnection =
+                    new SqlConnection(strConnectionString);
+
                 m_SqlConnection.Open();
 
-                m_SqlTransaction = m_SqlConnection.BeginTransaction();
+                m_SqlTransaction =
+                    m_SqlConnection.BeginTransaction();
 
                 return true;
             }
             catch
             {
-                if (m_SqlTransaction != null)
-                {
-                    m_SqlTransaction.Dispose();
-                    m_SqlTransaction = null;
-                }
-
-                if (m_SqlConnection != null)
-                {
-                    m_SqlConnection.Dispose();
-                    m_SqlConnection = null;
-                }
-
+                CleanupTransaction();
                 throw;
             }
         }
@@ -1078,9 +998,7 @@ namespace DBHandler
         public static bool Commit()
         {
             if (m_SqlTransaction == null)
-            {
                 return false;
-            }
 
             try
             {
@@ -1089,17 +1007,7 @@ namespace DBHandler
             }
             finally
             {
-                if (m_SqlTransaction != null)
-                {
-                    m_SqlTransaction.Dispose();
-                    m_SqlTransaction = null;
-                }
-
-                if (m_SqlConnection != null)
-                {
-                    m_SqlConnection.Dispose();
-                    m_SqlConnection = null;
-                }
+                CleanupTransaction();
             }
         }
 
@@ -1137,9 +1045,7 @@ namespace DBHandler
         public static bool Rollback()
         {
             if (m_SqlTransaction == null)
-            {
                 return false;
-            }
 
             try
             {
@@ -1148,33 +1054,13 @@ namespace DBHandler
             }
             finally
             {
-                if (m_SqlTransaction != null)
-                {
-                    m_SqlTransaction.Dispose();
-                    m_SqlTransaction = null;
-                }
-
-                if (m_SqlConnection != null)
-                {
-                    m_SqlConnection.Dispose();
-                    m_SqlConnection = null;
-                }
+                CleanupTransaction();
             }
         }
 
         public static void DisConnect()
         {
-            if (m_SqlTransaction != null)
-            {
-                m_SqlTransaction.Dispose();
-                m_SqlTransaction = null;
-            }
-
-            if (m_SqlConnection != null)
-            {
-                m_SqlConnection.Dispose();
-                m_SqlConnection = null;
-            }
+            CleanupTransaction();
         }
 
 
@@ -1194,7 +1080,7 @@ namespace DBHandler
     /// <summary>
     /// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /// </summary>
-    public class MSSQLDbAgent
+    public class MSSQLDbAgent : IDisposable
     {
         // Member Variables
         protected SqlConnection m_DBCon;
@@ -1207,7 +1093,7 @@ namespace DBHandler
         protected int m_nRows;
         protected string m_strSQL;
         protected string m_strRET;
-        
+
 
 
         public int COMMAND_TIMEOUT = 30;
@@ -1238,35 +1124,36 @@ namespace DBHandler
         /// <returns>DB 커넥션 상태</returns>
         public bool DBConnectState()
         {
-            if (m_DBCon == null ||
-                m_DBCon.State != ConnectionState.Open)
-            {
+            if (!IsConnected())
                 return false;
-            }
 
             try
             {
-                using (SqlCommand cmd = m_DBCon.CreateCommand())
+                using (SqlCommand cmd = CreateCommand(
+                    "SELECT 1",
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
                 {
-                    cmd.CommandType = CommandType.Text;
-                    cmd.CommandText = "SELECT 1";
-                    cmd.CommandTimeout = COMMAND_TIMEOUT;
-
-                    if (m_DBTrans != null)
-                    {
-                        cmd.Transaction = m_DBTrans;
-                    }
-
                     object result = cmd.ExecuteScalar();
 
-                    return result != null;
+                    return result != null &&
+                        result != DBNull.Value;
                 }
             }
             catch (Exception e)
             {
                 System.Diagnostics.Debug.WriteLine(e.Message);
 
-                DBDisConnect();
+                try
+                {
+                    DBDisConnect();
+                }
+                catch (Exception disconnectException)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        disconnectException.Message);
+                }
 
                 return false;
             }
@@ -1281,31 +1168,30 @@ namespace DBHandler
         /// <returns></returns>
         public bool DBConnect(string p_strConnectionString)
         {
+            if (string.IsNullOrWhiteSpace(p_strConnectionString))
+            {
+                throw new ArgumentException(
+                    "Connection string이 필요합니다.",
+                    nameof(p_strConnectionString));
+            }
+
+            DBDisConnect();
+
             try
             {
-                DBDisConnect();
+                m_DBCon =
+                    new SqlConnection(p_strConnectionString);
 
-                m_DBCon = new SqlConnection(p_strConnectionString);
                 m_DBCon.Open();
 
-                m_DBTrans = m_DBCon.BeginTransaction();
+                m_DBTrans =
+                    m_DBCon.BeginTransaction();
 
                 return true;
             }
             catch
             {
-                if (m_DBTrans != null)
-                {
-                    m_DBTrans.Dispose();
-                    m_DBTrans = null;
-                }
-
-                if (m_DBCon != null)
-                {
-                    m_DBCon.Dispose();
-                    m_DBCon = null;
-                }
-
+                CleanupConnection();
                 throw;
             }
         }
@@ -1321,21 +1207,20 @@ namespace DBHandler
         {
             try
             {
-                m_DBCon = new SqlConnection("Pooling=false;user id		= " + p_strUSER + ";" +
-                    "data source	= " + p_strAlias + ";" +
-                    "password		= " + p_strPW);
-                m_DBCon.Open();
+                string connectionString =
+                    "Pooling=false;user id=" +
+                    (p_strUSER ?? string.Empty) +
+                    ";data source=" +
+                    (p_strAlias ?? string.Empty) +
+                    ";password=" +
+                    (p_strPW ?? string.Empty);
 
-                //				m_DBCmd		= m_DBCon.CreateCommand();
-                m_DBTrans = m_DBCon.BeginTransaction();
-                //				m_DBCmd.Transaction = m_DBTrans;
+                return DBConnect(connectionString);
             }
             catch
             {
                 return false;
             }
-
-            return true;
         }
 
 
@@ -1356,22 +1241,30 @@ namespace DBHandler
         {
             try
             {
-                m_DBCon = new SqlConnection("Pooling=false;user id		= " + p_strUSER + ";" +
-                    "data source	= " + p_strAlias + ";" +
-                    "password		= " + p_strPW);
-                m_DBCon.Open();
+                string connectionString =
+                    "Pooling=false;user id=" +
+                    (p_strUSER ?? string.Empty) +
+                    ";data source=" +
+                    (p_strAlias ?? string.Empty) +
+                    ";password=" +
+                    (p_strPW ?? string.Empty);
 
-                //				m_DBCmd		= m_DBCon.CreateCommand();
-                m_DBTrans = m_DBCon.BeginTransaction();
-                //				m_DBCmd.Transaction = m_DBTrans;
+                DBConnect(connectionString);
+
+                p_strErrCode = string.Empty;
+                p_strErrText = string.Empty;
+
+                return true;
             }
             catch (Exception e)
             {
-                GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+                GetErrorCode(
+                    e,
+                    ref p_strErrCode,
+                    ref p_strErrText);
+
                 return false;
             }
-
-            return true;
         }
 
 
@@ -1380,29 +1273,7 @@ namespace DBHandler
         /// </summary>
         public void DBDisConnect()
         {
-            if (m_DataReader != null)
-            {
-                m_DataReader.Dispose();
-                m_DataReader = null;
-            }
-
-            if (m_DBCmd != null)
-            {
-                m_DBCmd.Dispose();
-                m_DBCmd = null;
-            }
-
-            if (m_DBTrans != null)
-            {
-                m_DBTrans.Dispose();
-                m_DBTrans = null;
-            }
-
-            if (m_DBCon != null)
-            {
-                m_DBCon.Dispose();
-                m_DBCon = null;
-            }
+            CleanupConnection();
         }
 
 
@@ -1419,6 +1290,10 @@ namespace DBHandler
             try
             {
                 DBDisConnect();
+
+                p_strErrCode = string.Empty;
+                p_strErrText = string.Empty;
+
                 return true;
             }
             catch (Exception e)
@@ -1440,16 +1315,13 @@ namespace DBHandler
         /// </summary>
         public void Commit()
         {
-            try
-            {
-                m_DBTrans.Commit();
-                m_DBTrans = m_DBCon.BeginTransaction();
-            }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine(e.Message);
-                throw;
-            }
+            EnsureTransaction();
+
+            m_DBTrans.Commit();
+            m_DBTrans.Dispose();
+
+            m_DBTrans =
+                m_DBCon.BeginTransaction();
         }
 
 
@@ -1463,16 +1335,22 @@ namespace DBHandler
         {
             try
             {
-                m_DBTrans.Commit();
-                m_DBTrans = m_DBCon.BeginTransaction();
+                Commit();
+
+                p_strErrCode = string.Empty;
+                p_strErrText = string.Empty;
+
+                return true;
             }
             catch (Exception e)
             {
-                GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+                GetErrorCode(
+                    e,
+                    ref p_strErrCode,
+                    ref p_strErrText);
+
                 return false;
             }
-
-            return true;
         }
 
 
@@ -1481,16 +1359,13 @@ namespace DBHandler
         /// </summary>
         public void RollBack()
         {
-            try
-            {
-                m_DBTrans.Rollback();
-                m_DBTrans = m_DBCon.BeginTransaction();
-            }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine(e.Message);
-                throw;
-            }
+            EnsureTransaction();
+
+            m_DBTrans.Rollback();
+            m_DBTrans.Dispose();
+
+            m_DBTrans =
+                m_DBCon.BeginTransaction();
         }
 
 
@@ -1504,40 +1379,49 @@ namespace DBHandler
         {
             try
             {
-                m_DBTrans.Rollback();
-                m_DBTrans = m_DBCon.BeginTransaction();
+                RollBack();
+
+                p_strErrCode = string.Empty;
+                p_strErrText = string.Empty;
+
+                return true;
             }
             catch (Exception e)
             {
-                GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+                GetErrorCode(
+                    e,
+                    ref p_strErrCode,
+                    ref p_strErrText);
+
                 return false;
             }
-
-            return true;
         }
         #endregion
 
         #region MssqlAgent : public void GetErrorCode(Exception e, ref string p_strErrCode, ref string p_strErrText)
         /// <summary>
-        /// GetErrorCode
+        /// Exception에서 MSSQL 오류 코드와 메시지를 추출합니다.
         /// </summary>
-        /// <param name="e">Exception</param>
-        /// <param name="p_strErrCode">ErrorCode(out)</param>
-        /// <param name="p_strErrText">ErrorText(out)</param>
         public void GetErrorCode(Exception e, ref string p_strErrCode, ref string p_strErrText)
         {
             SqlException sqlEx = e as SqlException;
 
             if (sqlEx != null)
             {
-                p_strErrCode = sqlEx.Number.ToString();
-                p_strErrText = sqlEx.Message;
+                p_strErrCode =
+                    sqlEx.Number.ToString();
+
+                p_strErrText =
+                    sqlEx.Message;
+
+                return;
             }
-            else
-            {
-                p_strErrCode = "AC7901";
-                p_strErrText = e.Message;
-            }
+
+            p_strErrCode = "AC7901";
+            p_strErrText =
+                e == null
+                    ? string.Empty
+                    : e.Message;
         }
 
         #endregion
@@ -1576,6 +1460,127 @@ namespace DBHandler
         }
         #endregion
 
+        #region Internal Helpers
+        private bool IsConnected()
+        {
+            return m_DBCon != null &&
+                m_DBCon.State == ConnectionState.Open;
+        }
+
+        private void EnsureConnected()
+        {
+            if (!IsConnected())
+            {
+                throw new InvalidOperationException(
+                    "MSSQL database is not connected.");
+            }
+        }
+
+        private void EnsureTransaction()
+        {
+            EnsureConnected();
+
+            if (m_DBTrans == null)
+            {
+                throw new InvalidOperationException(
+                    "MSSQL transaction is not active.");
+            }
+        }
+
+        private SqlCommand CreateCommand(
+            string commandText,
+            CommandType commandType,
+            int commandTimeout,
+            SqlParameter[] parameters)
+        {
+            EnsureConnected();
+
+            if (string.IsNullOrWhiteSpace(commandText))
+            {
+                throw new ArgumentException(
+                    "CommandText가 필요합니다.",
+                    nameof(commandText));
+            }
+
+            SqlCommand cmd = m_DBCon.CreateCommand();
+
+            try
+            {
+                cmd.CommandText = commandText;
+                cmd.CommandType = commandType;
+                cmd.CommandTimeout = commandTimeout;
+
+                if (m_DBTrans != null)
+                {
+                    cmd.Transaction = m_DBTrans;
+                }
+
+                if (parameters != null)
+                {
+                    foreach (SqlParameter parameter in parameters)
+                    {
+                        AddParameter(cmd, parameter);
+                    }
+                }
+
+                return cmd;
+            }
+            catch
+            {
+                cmd.Dispose();
+                throw;
+            }
+        }
+
+        private void DisposeCurrentReader()
+        {
+            if (m_DataReader != null)
+            {
+                m_DataReader.Dispose();
+                m_DataReader = null;
+            }
+
+            if (m_DataReader1 != null)
+            {
+                m_DataReader1.Dispose();
+                m_DataReader1 = null;
+            }
+        }
+
+        private void DisposeCurrentCommand()
+        {
+            if (m_DBCmd != null)
+            {
+                m_DBCmd.Dispose();
+                m_DBCmd = null;
+            }
+        }
+
+        private void CleanupConnection()
+        {
+            DisposeCurrentReader();
+            DisposeCurrentCommand();
+
+            if (m_DBTrans != null)
+            {
+                m_DBTrans.Dispose();
+                m_DBTrans = null;
+            }
+
+            if (m_DBCon != null)
+            {
+                m_DBCon.Dispose();
+                m_DBCon = null;
+            }
+        }
+
+        public void Dispose()
+        {
+            DBDisConnect();
+            GC.SuppressFinalize(this);
+        }
+        #endregion
+
         #region[ExecuteNonQuery]
         /// <summary>
         /// SQL 문을 실행한다
@@ -1601,37 +1606,14 @@ namespace DBHandler
         /// <returns></returns>
         public int ExecuteNonQuery(int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
-            int iReturn = 0;
-
-            //OracleConnection con = null;
-            //OracleCommand cmd = null;
-
-            try
+            using (SqlCommand cmd = CreateCommand(
+                commandText,
+                commandType,
+                commandTimeout,
+                oraParameters))
             {
-
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandText = commandText;
-                m_DBCmd.CommandType = commandType;
-                m_DBCmd.CommandTimeout = commandTimeout;
-                m_DBCmd.Transaction = m_DBTrans;
-
-                if (oraParameters != null)
-                {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        AddParameter(m_DBCmd, param);
-                    }
-                }
-
-
-                iReturn = m_DBCmd.ExecuteNonQuery();
+                return cmd.ExecuteNonQuery();
             }
-            finally
-            {
-                if (m_DBCmd != null) m_DBCmd.Dispose();
-            }
-
-            return iReturn;
         }
         #endregion
 
@@ -1647,21 +1629,19 @@ namespace DBHandler
         {
             try
             {
-                using (SqlCommand cmd = m_DBCon.CreateCommand())
+                using (SqlCommand cmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
                 {
-                    cmd.CommandType = CommandType.Text;
-                    cmd.CommandText = p_strSQL;
-                    cmd.CommandTimeout = COMMAND_TIMEOUT;
-
-                    if (m_DBTrans != null)
-                    {
-                        cmd.Transaction = m_DBTrans;
-                    }
-
                     m_nRows = cmd.ExecuteNonQuery();
-
-                    return m_nRows > 0;
                 }
+
+                p_strErrCode = string.Empty;
+                p_strErrText = string.Empty;
+
+                return m_nRows > 0;
             }
             catch (Exception e)
             {
@@ -1673,7 +1653,44 @@ namespace DBHandler
                 return false;
             }
         }
-   
+        /// <summary>
+        /// SQL문을 실행합니다.
+        /// </summary>
+        /// <param name="p_strSQL">SQL문</param>
+        /// <param name="p_nLongSize">InitialLONGFetchSize</param>
+        /// <param name="p_strErrCode">Error Code(out)</param>
+        /// <param name="p_strErrText">Error Text(out)</param>
+        /// <returns>성공여부</returns>
+        //public bool ExecuteNonQuery(string p_strSQL, int p_nLongSize, ref string p_strErrCode, ref string p_strErrText)
+        //{
+        //    try
+        //    {
+        //        m_DBCmd = m_DBCon.CreateCommand();
+        //        m_DBCmd.CommandType = CommandType.Text;
+        //        m_DBCmd.InitialLONGFetchSize = p_nLongSize;
+        //        m_DBCmd.CommandText = p_strSQL;
+        //        m_nRows = m_DBCmd.ExecuteNonQuery();
+
+        //        if (m_nRows == 0)
+        //        {
+        //            p_strErrCode = OracleDBDef.ORAMID_NOFOUND;
+        //            return false;
+        //        }
+        //    }
+        //    catch (Exception e)
+        //    {
+        //        GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+        //        return false;
+        //    }
+        //    finally
+        //    {
+        //        m_DBCmd.Dispose();
+        //    }
+
+        //    return true;
+        //}
+        #endregion
+
         #region MssqlAgent : public SqlDataReader ExecuteReader( string p_strSQL, ref string p_strErrCode, ref string p_strErrText)
         /// <summary>
         /// SQL문을 실행합니다.
@@ -1687,27 +1704,29 @@ namespace DBHandler
         {
             try
             {
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = p_strSQL;
-                m_DBCmd.CommandTimeout = COMMAND_TIMEOUT;
+                EnsureConnected();
 
-                if (m_DBTrans != null)
-                {
-                    m_DBCmd.Transaction = m_DBTrans;
-                }
+                DisposeCurrentReader();
+                DisposeCurrentCommand();
 
-                m_DataReader = m_DBCmd.ExecuteReader();
+                m_DBCmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null);
+
+                m_DataReader =
+                    m_DBCmd.ExecuteReader();
+
+                p_strErrCode = string.Empty;
+                p_strErrText = string.Empty;
 
                 return m_DataReader;
             }
             catch (Exception e)
             {
-                if (m_DBCmd != null)
-                {
-                    m_DBCmd.Dispose();
-                    m_DBCmd = null;
-                }
+                DisposeCurrentReader();
+                DisposeCurrentCommand();
 
                 GetErrorCode(
                     e,
@@ -1717,53 +1736,83 @@ namespace DBHandler
                 return null;
             }
         }
+        /// <summary>
+        /// SQL문을 실행합니다.
+        /// OracleDataReader 형태로 데이터 반환합니다.
+        /// </summary>
+        /// <param name="p_strSQL">SQL문</param>
+        /// <param name="p_nLongSize">InitialLONGFetchSize</param>
+        /// <param name="p_strErrCode">Error Code(out)</param>
+        /// <param name="p_strErrText">Error Text(out)</param>
+        /// <returns></returns>
+        //public OracleDataReader ExecuteReader(string p_strSQL, int p_nLongSize, ref string p_strErrCode, ref string p_strErrText)
+        //{
+        //    try
+        //    {
+        //        m_DBCmd = m_DBCon.CreateCommand();
+        //        m_DBCmd.CommandType = CommandType.Text;
+        //        m_DBCmd.InitialLONGFetchSize = p_nLongSize;
+        //        m_DBCmd.CommandText = p_strSQL;
+        //        m_DataReader = m_DBCmd.ExecuteReader();
+
+        //        return m_DataReader;
+        //    }
+        //    catch (Exception e)
+        //    {
+        //        GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+        //        return null;
+        //    }
+        //    finally
+        //    {
+        //        m_DBCmd.Dispose();
+        //    }
+        //}
+
         #endregion
 
         #region SqlAgent : public bool ExecuteScalar(string p_strSQL, ref int p_nValue, ref string p_strErrCode, ref string p_strErrText)
         /// <summary>
-        /// SQL문을 실행합니다.
+        /// SQL문을 실행하고 int 값을 반환합니다.
         /// </summary>
         /// <param name="p_strSQL">SQL문</param>
         /// <param name="p_nValue">int Value(out)</param>
         /// <param name="p_strErrCode">Error Code(out)</param>
         /// <param name="p_strErrText">Error Text(out)</param>
-        /// <returns></returns>
+        /// <returns>성공여부</returns>
         public bool ExecuteScalar(string p_strSQL, ref int p_nValue, ref string p_strErrCode, ref string p_strErrText)
         {
             try
             {
-                using (SqlCommand cmd = m_DBCon.CreateCommand())
+                using (SqlCommand cmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
                 {
-                    cmd.CommandType = CommandType.Text;
-                    cmd.CommandText = p_strSQL;
-                    cmd.CommandTimeout = COMMAND_TIMEOUT;
-
-                    if (m_DBTrans != null)
-                    {
-                        cmd.Transaction = m_DBTrans;
-                    }
-
                     object result = cmd.ExecuteScalar();
 
-                    if (result == null || result == DBNull.Value)
+                    if (result == null ||
+                        result == DBNull.Value)
                     {
                         p_nValue = 0;
-                        return true;
-                    }
-
-                    int value;
-
-                    if (int.TryParse(result.ToString(), out value))
-                    {
-                        p_nValue = value;
                     }
                     else
                     {
-                        p_nValue = 0;
-                    }
+                        int value;
 
-                    return true;
+                        p_nValue =
+                            int.TryParse(
+                                result.ToString(),
+                                out value)
+                                ? value
+                                : 0;
+                    }
                 }
+
+                p_strErrCode = string.Empty;
+                p_strErrText = string.Empty;
+
+                return true;
             }
             catch (Exception e)
             {
@@ -1788,38 +1837,36 @@ namespace DBHandler
         {
             try
             {
-                using (SqlCommand cmd = m_DBCon.CreateCommand())
+                using (SqlCommand cmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
                 {
-                    cmd.CommandType = CommandType.Text;
-                    cmd.CommandText = p_strSQL;
-                    cmd.CommandTimeout = COMMAND_TIMEOUT;
-
-                    if (m_DBTrans != null)
-                    {
-                        cmd.Transaction = m_DBTrans;
-                    }
-
                     object result = cmd.ExecuteScalar();
 
-                    if (result == null || result == DBNull.Value)
+                    if (result == null ||
+                        result == DBNull.Value)
                     {
-                        p_lgValue = 0;
-                        return true;
-                    }
-
-                    long value;
-
-                    if (long.TryParse(result.ToString(), out value))
-                    {
-                        p_lgValue = value;
+                        p_lgValue = 0L;
                     }
                     else
                     {
-                        p_lgValue = 0;
-                    }
+                        long value;
 
-                    return true;
+                        p_lgValue =
+                            long.TryParse(
+                                result.ToString(),
+                                out value)
+                                ? value
+                                : 0L;
+                    }
                 }
+
+                p_strErrCode = string.Empty;
+                p_strErrText = string.Empty;
+
+                return true;
             }
             catch (Exception e)
             {
@@ -1835,7 +1882,7 @@ namespace DBHandler
 
         #region MssqlAgent : public bool ExecuteScalar(string p_strSQL, ref string p_strValue, ref string p_strErrCode, ref string p_strErrText)
         /// <summary>
-        /// SQL문을 실행합니다.
+        /// SQL문을 실행하고 string 값을 반환합니다.
         /// </summary>
         /// <param name="p_strSQL">SQL문</param>
         /// <param name="p_strValue">string Value(out)</param>
@@ -1846,30 +1893,25 @@ namespace DBHandler
         {
             try
             {
-                using (SqlCommand cmd = m_DBCon.CreateCommand())
+                using (SqlCommand cmd = CreateCommand(
+                    p_strSQL,
+                    CommandType.Text,
+                    COMMAND_TIMEOUT,
+                    null))
                 {
-                    cmd.CommandType = CommandType.Text;
-                    cmd.CommandText = p_strSQL;
-                    cmd.CommandTimeout = COMMAND_TIMEOUT;
-
-                    if (m_DBTrans != null)
-                    {
-                        cmd.Transaction = m_DBTrans;
-                    }
-
                     object result = cmd.ExecuteScalar();
 
-                    if (result == null || result == DBNull.Value)
-                    {
-                        p_strValue = string.Empty;
-                    }
-                    else
-                    {
-                        p_strValue = result.ToString();
-                    }
-
-                    return true;
+                    p_strValue =
+                        result == null ||
+                        result == DBNull.Value
+                            ? string.Empty
+                            : result.ToString();
                 }
+
+                p_strErrCode = string.Empty;
+                p_strErrText = string.Empty;
+
+                return true;
             }
             catch (Exception e)
             {
@@ -1887,8 +1929,16 @@ namespace DBHandler
         #region ==== AddParameter ====
         private void AddParameter(SqlCommand cmd, SqlParameter param)
         {
-            if ((param.Value == null) || ((param.Value.GetType().ToString().Equals("System.String")) && ((string)param.Value).Length == 0))
-                param.Value = System.DBNull.Value;
+            if (param == null)
+                throw new ArgumentNullException(nameof(param));
+
+            if (param.Value == null ||
+                (param.Value is string &&
+                 ((string)param.Value).Length == 0))
+            {
+                param.Value = DBNull.Value;
+            }
+
             cmd.Parameters.Add(param);
         }
         #endregion
