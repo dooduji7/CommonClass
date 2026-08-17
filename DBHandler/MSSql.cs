@@ -1053,21 +1053,26 @@ namespace DBHandler
             {
                 return false;
             }
+
             try
             {
                 m_SqlTransaction.Commit();
-            }
-            catch (Exception exception)
-            {
-                throw new Exception(exception.Message);
+                return true;
             }
             finally
             {
-                m_SqlTransaction.Dispose();
-                m_SqlTransaction = null;
-                Dispose();
+                if (m_SqlTransaction != null)
+                {
+                    m_SqlTransaction.Dispose();
+                    m_SqlTransaction = null;
+                }
+
+                if (m_SqlConnection != null)
+                {
+                    m_SqlConnection.Dispose();
+                    m_SqlConnection = null;
+                }
             }
-            return true;
         }
 
         public static bool ExecuteNonQuery(string query)
