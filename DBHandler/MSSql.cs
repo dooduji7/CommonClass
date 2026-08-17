@@ -347,9 +347,9 @@ namespace DBHandler
                 cmd.Connection = con;
                 iReturn = cmd.ExecuteNonQuery();
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                throw e;
+                throw;
             }
             finally
             {
@@ -365,7 +365,6 @@ namespace DBHandler
                     cmd.Dispose();
                     cmd = null;
                 }
-                GC.Collect();
             }
 
             return iReturn;
@@ -480,7 +479,6 @@ namespace DBHandler
                     cmd.Dispose();
                     cmd = null;
                 }
-                GC.Collect();
             }
             return oReturn;
         }
@@ -626,7 +624,6 @@ namespace DBHandler
                         cmd.Dispose();
                         cmd = null;
                     }
-                    GC.Collect();
                 }
             }
 
@@ -760,7 +757,6 @@ namespace DBHandler
                     DataReader.Dispose();
                     DataReader = null;
                 }
-                GC.Collect();
             }
 
 
@@ -860,7 +856,6 @@ namespace DBHandler
                     da.Dispose();
                     da = null;
                 }
-                GC.Collect();
             }
 
             return dtReturn;
@@ -969,7 +964,6 @@ namespace DBHandler
                     da.Dispose();
                     da = null;
                 }
-                GC.Collect();
             }
 
             return dsReturn;
@@ -1084,7 +1078,6 @@ namespace DBHandler
                     cmd.Dispose();
                     cmd = null;
                 }
-                GC.Collect();
             }
 
             return dr;
@@ -1450,9 +1443,9 @@ namespace DBHandler
                 m_DBTrans = m_DBCon.BeginTransaction();
                 //				m_DBCmd.Transaction = m_DBTrans;
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                throw e;
+                throw;
             }
 
             return true;
@@ -1537,7 +1530,7 @@ namespace DBHandler
             catch (Exception e)
             {
                 System.Diagnostics.Debug.WriteLine(e.Message);
-                throw e;
+                throw;
 
             }
         }
@@ -1581,7 +1574,7 @@ namespace DBHandler
             catch (Exception e)
             {
                 System.Diagnostics.Debug.WriteLine(e.Message);
-                throw e;
+                throw;
             }
         }
 
@@ -1622,7 +1615,7 @@ namespace DBHandler
             catch (Exception e)
             {
                 System.Diagnostics.Debug.WriteLine(e.Message);
-                throw e;
+                throw;
             }
         }
 
@@ -1776,7 +1769,7 @@ namespace DBHandler
             }
             catch (Exception e)
             {
-                throw e;
+                throw;
             }
             finally
             {
