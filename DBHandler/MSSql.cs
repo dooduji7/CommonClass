@@ -95,7 +95,7 @@ namespace DBHandler
                         Params[i] = new SqlParameter(strParamID[i], strParamVAL[i]);
                         Params[i].Direction = ParameterDirection.Input;
                     }
-                    //MSSQLDbAccess.Execute(strSpName, Params, CommandType.StoredProcedure);
+                    MSSQLDbAccess.Execute(strSpName, Params, CommandType.StoredProcedure);
                 }
                 else
                 {
