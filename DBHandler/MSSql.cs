@@ -1131,36 +1131,23 @@ namespace DBHandler
 
         public static void DisConnect()
         {
-            try
+            if (m_SqlTransaction != null)
             {
-                if (m_SqlTransaction != null)
-                {
-                    m_SqlTransaction.Dispose();
-                    m_SqlTransaction = null;
-                }
-                if ((m_SqlConnection != null) && (m_SqlConnection.State == ConnectionState.Open))
-                {
-                    m_SqlConnection.Close();
-                    m_SqlConnection = null;
-                }
+                m_SqlTransaction.Dispose();
+                m_SqlTransaction = null;
             }
-            catch (Exception exception)
+
+            if (m_SqlConnection != null)
             {
-                throw new Exception(exception.Message);
+                m_SqlConnection.Dispose();
+                m_SqlConnection = null;
             }
         }
 
 
         public static void Dispose()
         {
-            try
-            {
-                DisConnect();
-            }
-            catch (Exception exception)
-            {
-                throw new Exception(exception.Message);
-            }
+            DisConnect();
         }
 
 
