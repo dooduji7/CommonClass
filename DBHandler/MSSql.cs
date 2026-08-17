@@ -1014,33 +1014,36 @@ namespace DBHandler
         #region transaction
         public static bool BeginTransaction()
         {
-            m_SqlConnection = new SqlConnection(strConnectionString);
             if (m_SqlTransaction != null)
             {
                 return false;
             }
+
             try
             {
-
-                if (m_SqlConnection.State == ConnectionState.Closed)
-                {
-                    try
-                    {
-                        m_SqlConnection.Open();
-                    }
-                    catch (Exception exception)
-                    {
-                        throw new Exception(exception.Message);
-                    }
-                }
+                m_SqlConnection = new SqlConnection(strConnectionString);
+                m_SqlConnection.Open();
 
                 m_SqlTransaction = m_SqlConnection.BeginTransaction();
+
+                return true;
             }
-            catch (Exception exception)
+            catch
             {
-                throw new Exception(exception.Message);
+                if (m_SqlTransaction != null)
+                {
+                    m_SqlTransaction.Dispose();
+                    m_SqlTransaction = null;
+                }
+
+                if (m_SqlConnection != null)
+                {
+                    m_SqlConnection.Dispose();
+                    m_SqlConnection = null;
+                }
+
+                throw;
             }
-            return true;
         }
 
 
