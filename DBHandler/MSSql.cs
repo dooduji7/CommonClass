@@ -405,25 +405,23 @@ namespace DBHandler
         /// <returns>첫번째행 리턴</returns>
         public static object ExecuteScalar(string p_strConnectionString, int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
-            SqlConnection con = null;
-            SqlCommand cmd = null;
             object oReturn = null;
 
-            try
-            {
-                #region JSBANG
-                string strData = commandText + " : ";
-                if (oraParameters != null)
-                {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        strData += " , " + string.Format("{0}", param.Value);
-                    }
-                }
-                System.Diagnostics.Debug.WriteLine(strData);
-                #endregion
+            string strData = commandText + " : ";
 
-                cmd = new SqlCommand();
+            if (oraParameters != null)
+            {
+                foreach (SqlParameter param in oraParameters)
+                {
+                    strData += " , " + string.Format("{0}", param.Value);
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine(strData);
+
+            using (SqlConnection con = new SqlConnection(p_strConnectionString))
+            using (SqlCommand cmd = new SqlCommand())
+            {
                 cmd.CommandText = commandText;
                 cmd.CommandType = commandType;
                 cmd.CommandTimeout = commandTimeout;
@@ -436,30 +434,17 @@ namespace DBHandler
                     }
                 }
 
-                if (m_SQLTraceMode.Equals("on")) SQLTrace(m_SQLTracePath, cmd, true);
+                if (m_SQLTraceMode.Equals("on"))
+                {
+                    SQLTrace(m_SQLTracePath, cmd, true);
+                }
 
-                con = new SqlConnection(p_strConnectionString);
                 con.Open();
 
                 cmd.Connection = con;
                 oReturn = cmd.ExecuteScalar();
+            }
 
-            }
-            finally
-            {
-                if (con != null)
-                {
-                    if (con.State == ConnectionState.Open)
-                        con.Close();
-                    con.Dispose();
-                    con = null;
-                }
-                if (cmd != null)
-                {
-                    cmd.Dispose();
-                    cmd = null;
-                }
-            }
             return oReturn;
         }
 
