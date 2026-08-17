@@ -845,13 +845,11 @@ namespace DBHandler
         {
             SqlConnection con = null;
             SqlCommand cmd = null;
-            SqlDataReader dr = null;
-
 
             try
             {
-                #region JSBANG
                 string strData = commandText + " : ";
+
                 if (oraParameters != null)
                 {
                     foreach (SqlParameter param in oraParameters)
@@ -859,10 +857,13 @@ namespace DBHandler
                         strData += " , " + string.Format("{0}", param.Value);
                     }
                 }
-                System.Diagnostics.Debug.WriteLine(strData);
-                #endregion
 
-                cmd = new SqlCommand();
+                System.Diagnostics.Debug.WriteLine(strData);
+
+                con = new SqlConnection(p_strConnectionString);
+                con.Open();
+
+                cmd = con.CreateCommand();
                 cmd.CommandText = commandText;
                 cmd.CommandType = commandType;
                 cmd.CommandTimeout = commandTimeout;
@@ -875,30 +876,29 @@ namespace DBHandler
                     }
                 }
 
-                if (m_SQLTraceMode.Equals("on")) SQLTrace(m_SQLTracePath, cmd, true);
+                if (m_SQLTraceMode.Equals("on"))
+                {
+                    SQLTrace(m_SQLTracePath, cmd, true);
+                }
 
-                con = new SqlConnection(p_strConnectionString);
-                con.Open();
-
-                cmd.Connection = con;
-                dr = cmd.ExecuteReader(CommandBehavior.CloseConnection);
-
+                return cmd.ExecuteReader(CommandBehavior.CloseConnection);
             }
-            finally
+            catch
             {
                 if (con != null)
                 {
                     con.Dispose();
-                    con = null;
                 }
+
+                throw;
+            }
+            finally
+            {
                 if (cmd != null)
                 {
                     cmd.Dispose();
-                    cmd = null;
                 }
             }
-
-            return dr;
         }
 
         #endregion
