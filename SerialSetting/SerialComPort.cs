@@ -9,6 +9,7 @@ using System.Diagnostics;
 
 namespace SerialHandler
 {
+    //20260817 최신소스 변경
     #region 이벤트 관련 클레스
     public class PortEventArgs : EventArgs
     {
@@ -42,6 +43,7 @@ namespace SerialHandler
         }
     }
     #endregion
+
 
     public class SerialComProt
     {
