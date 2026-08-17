@@ -655,58 +655,28 @@ namespace DBHandler
         /// <returns>DB 커넥션 상태</returns>
         public static bool DBConnectState()
         {
-
-            SqlConnection con = null;
-            SqlCommand cmd = null;
-            SqlDataReader DataReader = null;
-            bool bConnStat = false;
             try
             {
-                con = new SqlConnection(strConnectionString);
-                con.Open();
-                cmd = new SqlCommand();
-                cmd.Connection = con;
-
-                string sDate = "";
-                //cmd = con.CreateCommand();
-                cmd.CommandType = CommandType.Text;
-                cmd.CommandText = "SELECT dbo.GET_DATE()";
-                DataReader = cmd.ExecuteReader();
-                while (DataReader.Read())
+                using (SqlConnection con = new SqlConnection(strConnectionString))
+                using (SqlCommand cmd = new SqlCommand())
                 {
-                    sDate = DataReader[0].ToString();
-                    bConnStat = true;
-                    break;
+                    con.Open();
+
+                    cmd.Connection = con;
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandText = "SELECT dbo.GET_DATE()";
+
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+                        return reader.Read();
+                    }
                 }
             }
             catch (Exception e)
             {
                 System.Diagnostics.Debug.WriteLine(e.Message);
-                bConnStat = false;
+                return false;
             }
-            finally
-            {
-                if (con != null)
-                {
-                    if (con.State == ConnectionState.Open)
-                        con.Close();
-                    con.Dispose();
-                    con = null;
-                }
-                if (cmd != null)
-                {
-                    cmd.Dispose();
-                    cmd = null;
-                }
-                if (DataReader != null)
-                {
-                    DataReader.Dispose();
-                    DataReader = null;
-                }
-            }
-
-
-            return bConnStat;
         }
 
         public static DataTable GetDataTable(string p_strConnectionString, int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
