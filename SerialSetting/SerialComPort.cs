@@ -116,7 +116,7 @@ namespace SerialHandler
             {
                 foreach (ComPortEventHandler h in hdls)
                 {
-                    this.DataRecv -= h;
+                    this.DataRecv -= h;   
                 }
                 hdls.Clear();
             }
