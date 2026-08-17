@@ -308,25 +308,21 @@ namespace DBHandler
         {
             int iReturn = 0;
 
-            SqlConnection con = null;
-            SqlCommand cmd = null;
+            string strData = commandText + " : ";
 
-            try
+            if (oraParameters != null)
             {
-                #region JSBANG
-                string strData = commandText + " : ";
-                if (oraParameters != null)
+                foreach (SqlParameter param in oraParameters)
                 {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        strData += " , " + string.Format("{0}", param.Value);
-                    }
+                    strData += " , " + string.Format("{0}", param.Value);
                 }
-                System.Diagnostics.Debug.WriteLine(strData);
-                #endregion
+            }
 
+            System.Diagnostics.Debug.WriteLine(strData);
 
-                cmd = new SqlCommand();
+            using (SqlConnection con = new SqlConnection(p_strConnectionString))
+            using (SqlCommand cmd = new SqlCommand())
+            {
                 cmd.CommandText = commandText;
                 cmd.CommandType = commandType;
                 cmd.CommandTimeout = commandTimeout;
@@ -339,32 +335,16 @@ namespace DBHandler
                     }
                 }
 
-                if (m_SQLTraceMode.Equals("on")) SQLTrace(m_SQLTracePath, cmd, true);
+                if (m_SQLTraceMode.Equals("on"))
+                {
+                    SQLTrace(m_SQLTracePath, cmd, true);
+                }
 
-                con = new SqlConnection(p_strConnectionString);
                 con.Open();
 
                 cmd.Connection = con;
+
                 iReturn = cmd.ExecuteNonQuery();
-            }
-            catch (Exception)
-            {
-                throw;
-            }
-            finally
-            {
-                if (con != null)
-                {
-                    if (con.State == ConnectionState.Open)
-                        con.Close();
-                    con.Dispose();
-                    con = null;
-                }
-                if (cmd != null)
-                {
-                    cmd.Dispose();
-                    cmd = null;
-                }
             }
 
             return iReturn;
