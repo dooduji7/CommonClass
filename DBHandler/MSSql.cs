@@ -508,87 +508,68 @@ namespace DBHandler
         /// <returns>적용행수</returns>
         public static int ExecuteMultiple(string p_strConnectionString, int commandTimeout, string commandText, SqlParameter[] oraParameters, string[,] paramValues, CommandType commandType)
         {
-            if (oraParameters == null) throw new System.Exception("");//에러 메시지 어떻게 가져올 것인가?
-
-            #region JSBANG
-            string strData = commandText + " : ";
-            if (oraParameters != null)
-            {
-                foreach (SqlParameter param in oraParameters)
-                {
-                    strData += " , " + string.Format("{0}", param.Value);
-                }
-            }
-            System.Diagnostics.Debug.WriteLine(strData);
-            #endregion
+            if (oraParameters == null)
+                throw new ArgumentNullException(nameof(oraParameters));
 
             int iReturn = 0;
 
-            if (paramValues.Length > 0)
+            if (paramValues == null || paramValues.Length == 0)
+                return iReturn;
+
+            string strData = commandText + " : ";
+
+            foreach (SqlParameter param in oraParameters)
             {
-                SqlConnection con = null;
-                SqlCommand cmd = null;
+                strData += " , " + string.Format("{0}", param.Value);
+            }
 
-                int iColumnCount = paramValues.GetUpperBound(1) + 1;
-                int iRowCount = paramValues.GetUpperBound(0) + 1;
-                int iCol = 0;
-                int iRow = 0;
+            System.Diagnostics.Debug.WriteLine(strData);
 
-                string[] paramVals = new string[iColumnCount];
-                for (iCol = 0; iCol < iColumnCount; iCol++)
-                    paramVals[iCol] = paramValues[iRow, iCol];
+            int iColumnCount = paramValues.GetUpperBound(1) + 1;
+            int iRowCount = paramValues.GetUpperBound(0) + 1;
 
-                try
+            using (SqlConnection con = new SqlConnection(p_strConnectionString))
+            using (SqlCommand cmd = new SqlCommand())
+            {
+                cmd.CommandText = commandText;
+                cmd.CommandType = commandType;
+                cmd.CommandTimeout = commandTimeout;
+
+                foreach (SqlParameter param in oraParameters)
                 {
-                    cmd = new SqlCommand();
-                    cmd.CommandText = commandText;
-                    cmd.CommandType = commandType;
-                    cmd.CommandTimeout = commandTimeout;
+                    AddParameter(cmd, param);
+                }
 
-                    foreach (SqlParameter param in oraParameters)
+                con.Open();
+
+                cmd.Connection = con;
+                cmd.Prepare();
+
+                for (int iRow = 0; iRow < iRowCount; iRow++)
+                {
+                    for (int iCol = 0; iCol < iColumnCount; iCol++)
                     {
-                        AddParameter(cmd, param);
-                    }
+                        string strValue = paramValues[iRow, iCol];
 
-                    if (cmd != null)
-                    {
-                        con = new SqlConnection(p_strConnectionString);
-                        con.Open();
-
-                        cmd.Connection = con;
-                        cmd.Prepare();
-
-                        for (iRow = 0; iRow < iRowCount; iRow++)
+                        if (string.IsNullOrEmpty(strValue))
                         {
-                            for (iCol = 0; iCol < iColumnCount; iCol++)
-                            {
-                                string strValue = paramValues[iRow, iCol];
-                                if ((strValue == null) || (strValue.Length == 0)) cmd.Parameters[iCol].Value = System.DBNull.Value;
-                                else cmd.Parameters[iCol].Value = strValue;
-                            }
-                            if (m_SQLTraceMode.Equals("on"))
-                            {
-                                if (iRow == (iRowCount - 1)) SQLTrace(m_SQLTracePath, cmd, true);
-                                else SQLTrace(m_SQLTracePath, cmd, false);
-                            }
-                            iReturn += cmd.ExecuteNonQuery();
+                            cmd.Parameters[iCol].Value = DBNull.Value;
+                        }
+                        else
+                        {
+                            cmd.Parameters[iCol].Value = strValue;
                         }
                     }
-                }
-                finally
-                {
-                    if (con != null)
+
+                    if (m_SQLTraceMode.Equals("on"))
                     {
-                        if (con.State == ConnectionState.Open)
-                            con.Close();
-                        con.Dispose();
-                        con = null;
+                        SQLTrace(
+                            m_SQLTracePath,
+                            cmd,
+                            iRow == iRowCount - 1);
                     }
-                    if (cmd != null)
-                    {
-                        cmd.Dispose();
-                        cmd = null;
-                    }
+
+                    iReturn += cmd.ExecuteNonQuery();
                 }
             }
 
