@@ -711,37 +711,24 @@ namespace DBHandler
 
         public static DataTable GetDataTable(string p_strConnectionString, int commandTimeout, string commandText, SqlParameter[] oraParameters, CommandType commandType)
         {
-            SqlConnection con = null;
-            SqlCommand cmd = null;
-            SqlDataAdapter da = null;
-#if PTC
-            clsDataSet dsReturn = null;
-#else
-            DataTable dtReturn;
-#endif
+            string strData = commandText + " : ";
 
-
-
-            try
+            if (oraParameters != null)
             {
-                #region JSBANG
-                string strData = commandText + " : ";
-
-                if (oraParameters != null)
+                foreach (SqlParameter param in oraParameters)
                 {
-                    foreach (SqlParameter param in oraParameters)
-                    {
-                        strData += " , " + string.Format("{0}", param.Value);
-                    }
+                    strData += " , " + string.Format("{0}", param.Value);
                 }
-                System.Diagnostics.Debug.WriteLine(strData);
-                #endregion
+            }
 
-                cmd = new SqlCommand();
+            System.Diagnostics.Debug.WriteLine(strData);
+
+            using (SqlConnection con = new SqlConnection(p_strConnectionString))
+            using (SqlCommand cmd = new SqlCommand())
+            {
                 cmd.CommandText = commandText;
                 cmd.CommandType = commandType;
                 cmd.CommandTimeout = commandTimeout;
-                //cmd.InitialLONGFetchSize = -1; 
 
                 if (oraParameters != null)
                 {
@@ -751,60 +738,24 @@ namespace DBHandler
                     }
                 }
 
-                if (m_SQLTraceMode.Equals("on")) SQLTrace(m_SQLTracePath, cmd, true);
+                if (m_SQLTraceMode.Equals("on"))
+                {
+                    SQLTrace(m_SQLTracePath, cmd, true);
+                }
 
-                con = new SqlConnection(p_strConnectionString);
                 con.Open();
 
                 cmd.Connection = con;
 
-#if PTC
-                dsReturn = new clsDataSet();
-#else
-                dtReturn = new DataTable();
-#endif
-                da = new SqlDataAdapter(cmd);
-                da.Fill(dtReturn);
+                DataTable dtReturn = new DataTable();
 
-#if PTC
-                string strParam = "";
-
-                foreach (OracleParameter param in da.SelectCommand.Parameters)
+                using (SqlDataAdapter da = new SqlDataAdapter(cmd))
                 {
-                    if (param.OracleType != OracleType.Cursor)
-                    {
-                        strParam += param.Value.ToString() + " , ";
-                    }
+                    da.Fill(dtReturn);
                 }
 
-                dsReturn.P_SELECT_COMMAND = da.SelectCommand.CommandText;
-                dsReturn.P_PARAMETERS = strParam.Length > 0 ? strParam.Substring(0, strParam.Length - 2) : "";
-#endif
-
-
+                return dtReturn;
             }
-            finally
-            {
-                if (con != null)
-                {
-                    if (con.State == ConnectionState.Open)
-                        con.Close();
-                    con.Dispose();
-                    con = null;
-                }
-                if (cmd != null)
-                {
-                    cmd.Dispose();
-                    cmd = null;
-                }
-                if (da != null)
-                {
-                    da.Dispose();
-                    da = null;
-                }
-            }
-
-            return dtReturn;
         }
 
 
