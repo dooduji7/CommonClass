@@ -1077,28 +1077,33 @@ namespace DBHandler
 
         public static bool ExecuteNonQuery(string query)
         {
-            int num;
-            SqlCommand command = m_SqlConnection.CreateCommand();
-            if (m_SqlTransaction != null)
+            if (m_SqlConnection == null)
             {
-                command.Transaction = m_SqlTransaction;
+                throw new InvalidOperationException(
+                    "Transaction이 시작되지 않았습니다.");
             }
-            command.CommandType = CommandType.Text;
-            command.CommandText = query;
-            try
+
+            if (m_SqlConnection.State != ConnectionState.Open)
             {
-                num = command.ExecuteNonQuery();
+                throw new InvalidOperationException(
+                    "DB 연결이 열려 있지 않습니다.");
             }
-            catch (Exception exception)
+
+            using (SqlCommand command = m_SqlConnection.CreateCommand())
             {
-                throw new Exception(exception.Message);
+                command.CommandType = CommandType.Text;
+                command.CommandText = query;
+                command.CommandTimeout = COMMAND_TIMEOUT;
+
+                if (m_SqlTransaction != null)
+                {
+                    command.Transaction = m_SqlTransaction;
+                }
+
+                int affectedRows = command.ExecuteNonQuery();
+
+                return affectedRows > 0;
             }
-            finally
-            {
-                command.Dispose();
-                command = null;
-            }
-            return (num > 0);
         }
 
         public static bool Rollback()
