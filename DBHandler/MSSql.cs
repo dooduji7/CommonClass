@@ -1,11 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Data.SqlClient;
 using System.Data;
-using Oracle.ManagedDataAccess.Client;
+using System.Data.SqlClient;
 
 namespace DBHandler
 {
@@ -1212,7 +1207,7 @@ namespace DBHandler
         protected int m_nRows;
         protected string m_strSQL;
         protected string m_strRET;
-        protected string m_strOraErr = "ORA";
+        
 
 
         public int COMMAND_TIMEOUT = 30;
@@ -1256,6 +1251,11 @@ namespace DBHandler
                     cmd.CommandType = CommandType.Text;
                     cmd.CommandText = "SELECT 1";
                     cmd.CommandTimeout = COMMAND_TIMEOUT;
+
+                    if (m_DBTrans != null)
+                    {
+                        cmd.Transaction = m_DBTrans;
+                    }
 
                     object result = cmd.ExecuteScalar();
 
@@ -1380,6 +1380,18 @@ namespace DBHandler
         /// </summary>
         public void DBDisConnect()
         {
+            if (m_DataReader != null)
+            {
+                m_DataReader.Dispose();
+                m_DataReader = null;
+            }
+
+            if (m_DBCmd != null)
+            {
+                m_DBCmd.Dispose();
+                m_DBCmd = null;
+            }
+
             if (m_DBTrans != null)
             {
                 m_DBTrans.Dispose();
@@ -1400,20 +1412,24 @@ namespace DBHandler
         /// <param name="p_strErrCode">ErrorCode(out)</param>
         /// <param name="p_strErrText">ErrorText(out)</param>
         /// <returns></returns>
-        public bool DBDisConnect(ref string p_strErrCode, ref string p_strErrText)
+        public bool DBDisConnect(
+            ref string p_strErrCode,
+            ref string p_strErrText)
         {
             try
             {
-                m_DBTrans.Dispose();
-                if (m_DBCon.State == ConnectionState.Open) m_DBCon.Close();
+                DBDisConnect();
+                return true;
             }
             catch (Exception e)
             {
-                GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+                GetErrorCode(
+                    e,
+                    ref p_strErrCode,
+                    ref p_strErrText);
+
                 return false;
             }
-
-            return true;
         }
 
         #endregion
@@ -1510,33 +1526,18 @@ namespace DBHandler
         /// <param name="p_strErrText">ErrorText(out)</param>
         public void GetErrorCode(Exception e, ref string p_strErrCode, ref string p_strErrText)
         {
-            if (e.Message.Substring(0, 3) == m_strOraErr)
+            SqlException sqlEx = e as SqlException;
+
+            if (sqlEx != null)
             {
-                p_strErrCode = "O" + e.Message.Substring(4, 5);
-                p_strErrText = e.Message.Substring(10);
+                p_strErrCode = sqlEx.Number.ToString();
+                p_strErrText = sqlEx.Message;
             }
             else
             {
                 p_strErrCode = "AC7901";
                 p_strErrText = e.Message;
             }
-        }
-
-        /// <summary>
-        /// IsDBNoConnErrCode
-        /// </summary>
-        /// <param name="p_strErrCode">ErrorCode</param>
-        /// <returns></returns>
-        public bool IsDBNoConnErrCode(string p_strErrCode)
-        {
-            if (p_strErrCode == OracleDBDef.ORAMID_NOCONN1 ||
-                p_strErrCode == OracleDBDef.ORAMID_NOCONN2 ||
-                p_strErrCode == OracleDBDef.ORAMID_NOCONN3 ||
-                p_strErrCode == OracleDBDef.ORAMID_NOCONN4 ||
-                p_strErrCode == OracleDBDef.ORAMID_NOCONN5 ||
-                p_strErrCode == OracleDBDef.ORAMID_NOCONN6 ||
-                p_strErrCode == OracleDBDef.ORAMID_NOCONN7) return true;
-            return false;
         }
 
         #endregion
@@ -1650,29 +1651,31 @@ namespace DBHandler
         {
             try
             {
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = p_strSQL;
-                m_nRows = m_DBCmd.ExecuteNonQuery();
-
-                if (m_nRows == 0)
+                using (SqlCommand cmd = m_DBCon.CreateCommand())
                 {
-                    //p_strErrCode = OracleDBDef.ORAMID_NOFOUND;
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandText = p_strSQL;
+                    cmd.CommandTimeout = COMMAND_TIMEOUT;
 
-                    return false;
+                    if (m_DBTrans != null)
+                    {
+                        cmd.Transaction = m_DBTrans;
+                    }
+
+                    m_nRows = cmd.ExecuteNonQuery();
+
+                    return m_nRows > 0;
                 }
             }
             catch (Exception e)
             {
-                GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+                GetErrorCode(
+                    e,
+                    ref p_strErrCode,
+                    ref p_strErrText);
+
                 return false;
             }
-            finally
-            {
-                m_DBCmd.Dispose();
-            }
-
-            return true;
         }
         /// <summary>
         /// SQL문을 실행합니다.
@@ -1728,18 +1731,31 @@ namespace DBHandler
                 m_DBCmd = m_DBCon.CreateCommand();
                 m_DBCmd.CommandType = CommandType.Text;
                 m_DBCmd.CommandText = p_strSQL;
+                m_DBCmd.CommandTimeout = COMMAND_TIMEOUT;
+
+                if (m_DBTrans != null)
+                {
+                    m_DBCmd.Transaction = m_DBTrans;
+                }
+
                 m_DataReader = m_DBCmd.ExecuteReader();
 
                 return m_DataReader;
             }
             catch (Exception e)
             {
-                GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+                if (m_DBCmd != null)
+                {
+                    m_DBCmd.Dispose();
+                    m_DBCmd = null;
+                }
+
+                GetErrorCode(
+                    e,
+                    ref p_strErrCode,
+                    ref p_strErrText);
+
                 return null;
-            }
-            finally
-            {
-                m_DBCmd.Dispose();
             }
         }
         /// <summary>
@@ -1789,37 +1805,50 @@ namespace DBHandler
         {
             try
             {
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = p_strSQL;
-
-                //p_nValue = MES.FW.Common.Util.StringToInt(m_DBCmd.ExecuteScalar().ToString());
-                string strValue = m_DBCmd.ExecuteScalar().ToString();
-
-                if (strValue != null && strValue != "")
+                using (SqlCommand cmd = m_DBCon.CreateCommand())
                 {
-                    try
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandText = p_strSQL;
+                    cmd.CommandTimeout = COMMAND_TIMEOUT;
+
+                    if (m_DBTrans != null)
                     {
-                        p_nValue = int.Parse(strValue);
+                        cmd.Transaction = m_DBTrans;
                     }
-                    catch
+
+                    object result = cmd.ExecuteScalar();
+
+                    if (result == null || result == DBNull.Value)
+                    {
+                        p_nValue = 0;
+                        return true;
+                    }
+
+                    int value;
+
+                    if (int.TryParse(result.ToString(), out value))
+                    {
+                        p_nValue = value;
+                    }
+                    else
                     {
                         p_nValue = 0;
                     }
-                }
 
+                    return true;
+                }
             }
             catch (Exception e)
             {
-                GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+                GetErrorCode(
+                    e,
+                    ref p_strErrCode,
+                    ref p_strErrText);
+
                 return false;
             }
-            finally
-            {
-                m_DBCmd.Dispose();
-            }
-            return true;
         }
+
         /// <summary>
         /// SQL문을 실행합니다.
         /// </summary>
@@ -1830,11 +1859,50 @@ namespace DBHandler
         /// <returns>성공여부</returns>
         public bool ExecuteScalar(string p_strSQL, ref long p_lgValue, ref string p_strErrCode, ref string p_strErrText)
         {
-            int nVal = 0;
-            if (!ExecuteScalar(p_strSQL, ref nVal, ref p_strErrCode, ref p_strErrText)) return false;
-            p_lgValue = nVal;
+            try
+            {
+                using (SqlCommand cmd = m_DBCon.CreateCommand())
+                {
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandText = p_strSQL;
+                    cmd.CommandTimeout = COMMAND_TIMEOUT;
 
-            return true;
+                    if (m_DBTrans != null)
+                    {
+                        cmd.Transaction = m_DBTrans;
+                    }
+
+                    object result = cmd.ExecuteScalar();
+
+                    if (result == null || result == DBNull.Value)
+                    {
+                        p_lgValue = 0;
+                        return true;
+                    }
+
+                    long value;
+
+                    if (long.TryParse(result.ToString(), out value))
+                    {
+                        p_lgValue = value;
+                    }
+                    else
+                    {
+                        p_lgValue = 0;
+                    }
+
+                    return true;
+                }
+            }
+            catch (Exception e)
+            {
+                GetErrorCode(
+                    e,
+                    ref p_strErrCode,
+                    ref p_strErrText);
+
+                return false;
+            }
         }
         #endregion
 
@@ -1851,31 +1919,40 @@ namespace DBHandler
         {
             try
             {
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = p_strSQL;
-
-                if (m_DBCmd.ExecuteScalar() != null)
+                using (SqlCommand cmd = m_DBCon.CreateCommand())
                 {
-                    p_strValue = m_DBCmd.ExecuteScalar().ToString();
-                }
-                else
-                {
-                    p_strValue = "";
-                }
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandText = p_strSQL;
+                    cmd.CommandTimeout = COMMAND_TIMEOUT;
 
+                    if (m_DBTrans != null)
+                    {
+                        cmd.Transaction = m_DBTrans;
+                    }
+
+                    object result = cmd.ExecuteScalar();
+
+                    if (result == null || result == DBNull.Value)
+                    {
+                        p_strValue = string.Empty;
+                    }
+                    else
+                    {
+                        p_strValue = result.ToString();
+                    }
+
+                    return true;
+                }
             }
             catch (Exception e)
             {
-                GetErrorCode(e, ref p_strErrCode, ref p_strErrText);
+                GetErrorCode(
+                    e,
+                    ref p_strErrCode,
+                    ref p_strErrText);
+
                 return false;
             }
-            finally
-            {
-                m_DBCmd.Dispose();
-            }
-
-            return true;
         }
         #endregion
 
