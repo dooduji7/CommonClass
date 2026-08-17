@@ -155,43 +155,65 @@ namespace DBHandler
         /// <returns></returns>
         public static string ExecuteProcedureResult(string strSpName, string strID, string strVAL)
         {
-            // DataSet ds = null;
+            if (string.IsNullOrWhiteSpace(strID))
+            {
+                throw new ArgumentException(
+                    "Output Parameter 정보가 필요합니다.",
+                    nameof(strID));
+            }
+
             string strError = string.Empty;
-            int i = 0;
+
             try
             {
-                string[] strParamID = null;
-                string[] strParamVAL = null;
+                string[] strParamID = strID.Split('@');
+                string[] strParamVAL = strVAL.Split('@');
 
-                if (strID.Trim().Length != 0)
+                if (strParamID.Length != strParamVAL.Length)
                 {
-                    strParamID = strID.Split('@');
-                    strParamVAL = strVAL.Split('@');
-
-                    SqlParameter[] Params = new SqlParameter[strParamID.Length];
-
-                    for (i = 0; i < strParamID.Length - 1; i++)
-                    {
-                        Params[i] = new SqlParameter(strParamID[i], strParamVAL[i]);
-                        Params[i].Direction = ParameterDirection.Input;
-                    }
-
-                    Params[i] = new SqlParameter(strParamID[i], SqlDbType.VarChar, 500);
-                    Params[i].Direction = ParameterDirection.Output;
-
-                    //ds = MSSQLDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
-                    MSSQLDbAccess.ExecuteScalar(strSpName, Params, CommandType.StoredProcedure);
-                    strError = Params[i].Value.ToString().Trim();
+                    throw new ArgumentException(
+                        "Parameter 이름과 값의 개수가 일치하지 않습니다.");
                 }
-                else
+
+                SqlParameter[] Params =
+                    new SqlParameter[strParamID.Length];
+
+                int i;
+
+                // 마지막 Parameter는 Output Parameter이므로
+                // 그 이전까지 Input Parameter로 구성
+                for (i = 0; i < strParamID.Length - 1; i++)
                 {
-                    SqlParameter[] Params = new SqlParameter[1];
-                    Params[0] = new SqlParameter(strParamID[i], SqlDbType.VarChar, 500);
-                    Params[0].Direction = ParameterDirection.Output;
-                    //return MSSQLDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
-                    MSSQLDbAccess.ExecuteScalar(strSpName, Params, CommandType.StoredProcedure);
-                    strError = Params[i].Value.ToString().Trim();
+                    Params[i] = new SqlParameter(
+                        strParamID[i],
+                        strParamVAL[i]);
+
+                    Params[i].Direction =
+                        ParameterDirection.Input;
                 }
+
+                // 마지막 Parameter = Output
+                Params[i] = new SqlParameter(
+                    strParamID[i],
+                    SqlDbType.VarChar,
+                    500);
+
+                Params[i].Direction =
+                    ParameterDirection.Output;
+
+                MSSQLDbAccess.ExecuteScalar(
+                    strSpName,
+                    Params,
+                    CommandType.StoredProcedure);
+
+                if (Params[i].Value != null &&
+                    Params[i].Value != DBNull.Value)
+                {
+                    strError =
+                        Params[i].Value.ToString().Trim();
+                }
+
+                return strError;
             }
             catch (Exception ex)
             {
@@ -199,49 +221,62 @@ namespace DBHandler
                 System.Diagnostics.Debug.WriteLine(ex.StackTrace);
                 throw;
             }
-
-            return strError;
-            //return ds;
         }
 
         public static string ExecuteProcedureResult(string strSpName, string strID, string strVAL, char split)
         {
+            if (string.IsNullOrWhiteSpace(strID))
+            {
+                throw new ArgumentException(
+                    "Output Parameter 정보가 필요합니다.",
+                    nameof(strID));
+            }
+
             string strError = string.Empty;
-            int i = 0;
-            //DataSet ds = null;
+
             try
             {
-                string[] strParamID = null;
-                string[] strParamVAL = null;
+                string[] strParamID = strID.Split(split);
+                string[] strParamVAL = strVAL.Split(split);
 
-                if (strID.Trim().Length != 0)
+                SqlParameter[] Params =
+                    new SqlParameter[strParamID.Length];
+
+                int i;
+
+                // 마지막 Parameter를 제외하고 Input Parameter 구성
+                for (i = 0; i < strParamID.Length - 1; i++)
                 {
-                    strParamID = strID.Split(split);
-                    strParamVAL = strVAL.Split(split);
+                    Params[i] = new SqlParameter(
+                        strParamID[i],
+                        strParamVAL[i]);
 
-                    SqlParameter[] Params = new SqlParameter[strParamID.Length];
-                    for (i = 0; i < strParamID.Length - 1; i++)
-                    {
-                        Params[i] = new SqlParameter(strParamID[i], strParamVAL[i]);
-                        Params[i].Direction = ParameterDirection.Input;
-                    }
-
-                    Params[i] = new SqlParameter(strParamID[i], OracleDbType.RefCursor);
-                    Params[i].Direction = ParameterDirection.Output;
-
-                    //return MSSQLDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
-                    MSSQLDbAccess.ExecuteScalar(strSpName, Params, CommandType.StoredProcedure);
-                    strError = Params[i].Value.ToString().Trim();
+                    Params[i].Direction =
+                        ParameterDirection.Input;
                 }
-                else
+
+                // 마지막 Parameter = Output
+                Params[i] = new SqlParameter(
+                    strParamID[i],
+                    SqlDbType.VarChar,
+                    500);
+
+                Params[i].Direction =
+                    ParameterDirection.Output;
+
+                MSSQLDbAccess.ExecuteScalar(
+                    strSpName,
+                    Params,
+                    CommandType.StoredProcedure);
+
+                if (Params[i].Value != null &&
+                    Params[i].Value != DBNull.Value)
                 {
-                    SqlParameter[] Params = new SqlParameter[1];
-                    Params[0] = new SqlParameter(strParamID[i], OracleDbType.RefCursor);
-                    Params[0].Direction = ParameterDirection.Output;
-                    // return MSSQLDbAccess.GetDataSet(strSpName, Params, CommandType.StoredProcedure);
-                    MSSQLDbAccess.ExecuteScalar(strSpName, Params, CommandType.StoredProcedure);
-                    strError = Params[i].Value.ToString().Trim();
+                    strError =
+                        Params[i].Value.ToString().Trim();
                 }
+
+                return strError;
             }
             catch (Exception ex)
             {
@@ -249,8 +284,6 @@ namespace DBHandler
                 System.Diagnostics.Debug.WriteLine(ex.StackTrace);
                 throw;
             }
-            return strError;
-            //return ds;
         }
         #endregion
 
