@@ -1243,42 +1243,33 @@ namespace DBHandler
         /// <returns>DB 커넥션 상태</returns>
         public bool DBConnectState()
         {
-            bool bConnStat = false;
-            if (m_DBCon == null || m_DBCon.State.ToString() == "Closed") return false;
+            if (m_DBCon == null ||
+                m_DBCon.State != ConnectionState.Open)
+            {
+                return false;
+            }
 
             try
             {
-
-
-
-                string sDate = "";
-                m_DBCmd = m_DBCon.CreateCommand();
-                m_DBCmd.CommandType = CommandType.Text;
-                m_DBCmd.CommandText = "SELECT TO_CHAR(SYSDATE, 'YYYYMMDD') FROM DUAL";
-                m_DataReader = m_DBCmd.ExecuteReader();
-                while (m_DataReader.Read())
+                using (SqlCommand cmd = m_DBCon.CreateCommand())
                 {
-                    sDate = m_DataReader[0].ToString();
-                    bConnStat = true;
-                    break;
+                    cmd.CommandType = CommandType.Text;
+                    cmd.CommandText = "SELECT 1";
+                    cmd.CommandTimeout = COMMAND_TIMEOUT;
+
+                    object result = cmd.ExecuteScalar();
+
+                    return result != null;
                 }
             }
             catch (Exception e)
             {
                 System.Diagnostics.Debug.WriteLine(e.Message);
-                bConnStat = false;
-            }
-            finally
-            {
-                m_DBCmd.Dispose();
-                if (m_DataReader != null)
-                    m_DataReader.Dispose();
-                if (!bConnStat)
-                    DBDisConnect();
-            }
 
+                DBDisConnect();
 
-            return bConnStat;
+                return false;
+            }
         }
         #endregion
 
@@ -1292,19 +1283,31 @@ namespace DBHandler
         {
             try
             {
+                DBDisConnect();
+
                 m_DBCon = new SqlConnection(p_strConnectionString);
                 m_DBCon.Open();
 
-                //				m_DBCmd		= m_DBCon.CreateCommand();
                 m_DBTrans = m_DBCon.BeginTransaction();
-                //				m_DBCmd.Transaction = m_DBTrans;
+
+                return true;
             }
-            catch (Exception)
+            catch
             {
+                if (m_DBTrans != null)
+                {
+                    m_DBTrans.Dispose();
+                    m_DBTrans = null;
+                }
+
+                if (m_DBCon != null)
+                {
+                    m_DBCon.Dispose();
+                    m_DBCon = null;
+                }
+
                 throw;
             }
-
-            return true;
         }
 
         /// <summary>
@@ -1377,17 +1380,16 @@ namespace DBHandler
         /// </summary>
         public void DBDisConnect()
         {
-            try
+            if (m_DBTrans != null)
             {
                 m_DBTrans.Dispose();
-                //				if ( m_DBCon.State == ConnectionState.Open )	
-                m_DBCon.Close();
+                m_DBTrans = null;
             }
-            catch (Exception e)
-            {
-                System.Diagnostics.Debug.WriteLine(e.Message);
-                throw;
 
+            if (m_DBCon != null)
+            {
+                m_DBCon.Dispose();
+                m_DBCon = null;
             }
         }
 
