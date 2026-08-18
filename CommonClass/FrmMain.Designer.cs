@@ -77,7 +77,7 @@
             this.btnSocketTest.Name = "btnSocketTest";
             this.btnSocketTest.Size = new System.Drawing.Size(242, 29);
             this.btnSocketTest.TabIndex = 0;
-            this.btnSocketTest.Text = "SocketTest";
+            this.btnSocketTest.Text = "ㄱ";
             this.btnSocketTest.UseVisualStyleBackColor = true;
             this.btnSocketTest.Click += new System.EventHandler(this.btnSocketTest_Click);
             // 
