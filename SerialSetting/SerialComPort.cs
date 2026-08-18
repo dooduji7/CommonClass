@@ -41,7 +41,7 @@ namespace SerialHandler
 
     #endregion
 
-    public class SerialComProt : IDisposable
+    public class SerialComPort : IDisposable
     {
         #region Field
 
@@ -88,7 +88,7 @@ namespace SerialHandler
         /// 데이터 자동으로 읽어 이벤트 발생할지 설정한다.
         /// </summary>
         /// <param name="bStart"></param>
-        public SerialComProt(bool bStart)
+        public SerialComPort(bool bStart)
         {
             SetAutoReadEvent(bStart);
         }
@@ -97,7 +97,7 @@ namespace SerialHandler
         /// 기본 생성자.
         /// 기존 동작과 동일하게 자동 수신 이벤트는 등록하지 않는다.
         /// </summary>
-        public SerialComProt()
+        public SerialComPort()
         {
             SetAutoReadEvent(false);
         }
@@ -658,7 +658,7 @@ namespace SerialHandler
         private void ThrowIfDisposed()
         {
             if (m_disposed)
-                throw new ObjectDisposedException(nameof(SerialComProt));
+                throw new ObjectDisposedException(nameof(SerialComPort));
         }
 
         #endregion
