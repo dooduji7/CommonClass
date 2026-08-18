@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -13,11 +14,18 @@ namespace AsyncSocket
 
         private Socket worker;
         private byte[] buffer;
+        private int generation;
 
         public StateObject(Socket worker)
+            : this(worker, 0)
+        {
+        }
+
+        internal StateObject(Socket worker, int generation)
         {
             this.worker = worker;
             this.buffer = new byte[BUFFER_SIZE];
+            this.generation = generation;
         }
 
         public Socket Worker
@@ -35,6 +43,11 @@ namespace AsyncSocket
         public int BufferSize
         {
             get { return BUFFER_SIZE; }
+        }
+
+        internal int Generation
+        {
+            get { return this.generation; }
         }
     }
 
@@ -119,7 +132,7 @@ namespace AsyncSocket
         {
             this.id = id;
             this.receiveBytes = receiveBytes;
-            this.receiveData = receiveData;
+            this.receiveData = receiveData ?? new byte[0];
         }
 
         public int ReceiveBytes
@@ -130,6 +143,21 @@ namespace AsyncSocket
         public byte[] ReceiveData
         {
             get { return this.receiveData; }
+        }
+
+        /// <summary>
+        /// 수신 데이터를 별도 배열로 복사해서 반환한다.
+        /// ReceiveData 자체도 실제 수신 길이 배열이지만,
+        /// 호출부에서 독립 복사본이 필요한 경우 사용할 수 있다.
+        /// </summary>
+        public byte[] GetDataCopy()
+        {
+            byte[] copy = new byte[this.receiveBytes];
+
+            if (this.receiveBytes > 0)
+                Buffer.BlockCopy(this.receiveData, 0, copy, 0, this.receiveBytes);
+
+            return copy;
         }
 
         public int ID
@@ -193,48 +221,121 @@ namespace AsyncSocket
         {
             AsyncSocketErrorEventHandler handler = OnError;
 
-            if (handler != null)
-                handler(this, e);
+            if (handler == null)
+                return;
+
+            foreach (AsyncSocketErrorEventHandler subscriber in handler.GetInvocationList())
+            {
+                try
+                {
+                    subscriber(this, e);
+                }
+                catch (Exception ex)
+                {
+                    // Error Handler 자체 예외를 다시 OnError로 올리면 재귀 오류가 될 수 있으므로 Debug만 남긴다.
+                    Debug.WriteLine("[AsyncSocket] OnError Handler Error : " + ex);
+                }
+            }
         }
 
         protected virtual void Connected(AsyncSocketConnectionEventArgs e)
         {
             AsyncSocketConnectEventHandler handler = OnConnet;
 
-            if (handler != null)
-                handler(this, e);
+            if (handler == null)
+                return;
+
+            foreach (AsyncSocketConnectEventHandler subscriber in handler.GetInvocationList())
+            {
+                try
+                {
+                    subscriber(this, e);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[AsyncSocket] OnConnet Handler Error : " + ex);
+                }
+            }
         }
 
         protected virtual void Closed(AsyncSocketConnectionEventArgs e)
         {
             AsyncSocketCloseEventHandler handler = OnClose;
 
-            if (handler != null)
-                handler(this, e);
+            if (handler == null)
+                return;
+
+            foreach (AsyncSocketCloseEventHandler subscriber in handler.GetInvocationList())
+            {
+                try
+                {
+                    subscriber(this, e);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[AsyncSocket] OnClose Handler Error : " + ex);
+                }
+            }
         }
 
         protected virtual void Sent(AsyncSocketSendEventArgs e)
         {
             AsyncSocketSendEventHandler handler = OnSend;
 
-            if (handler != null)
-                handler(this, e);
+            if (handler == null)
+                return;
+
+            foreach (AsyncSocketSendEventHandler subscriber in handler.GetInvocationList())
+            {
+                try
+                {
+                    subscriber(this, e);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[AsyncSocket] OnSend Handler Error : " + ex);
+                }
+            }
         }
 
         protected virtual void Received(AsyncSocketReceiveEventArgs e)
         {
             AsyncSocketReceiveEventHandler handler = OnReceive;
 
-            if (handler != null)
-                handler(this, e);
+            if (handler == null)
+                return;
+
+            foreach (AsyncSocketReceiveEventHandler subscriber in handler.GetInvocationList())
+            {
+                try
+                {
+                    subscriber(this, e);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[AsyncSocket] OnReceive Handler Error : " + ex);
+                }
+            }
         }
 
         protected virtual void Accepted(AsyncSocketAcceptEventArgs e)
         {
             AsyncSocketAcceptEventHandler handler = OnAccept;
 
-            if (handler != null)
-                handler(this, e);
+            if (handler == null)
+                return;
+
+            foreach (AsyncSocketAcceptEventHandler subscriber in handler.GetInvocationList())
+            {
+                try
+                {
+                    subscriber(this, e);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("[AsyncSocket] OnAccept Handler Error : " + ex);
+                }
+            }
         }
     }
 
@@ -243,24 +344,32 @@ namespace AsyncSocket
     /// </summary>
     public class AsyncSocketClient : AsyncSocketClass, IDisposable
     {
+        private sealed class ConnectState
+        {
+            public Socket Socket;
+            public int Generation;
+        }
+
         private sealed class SendState
         {
             public Socket Socket;
             public byte[] Buffer;
             public int Offset;
             public int TotalBytes;
+            public int Generation;
         }
 
         private readonly object syncRoot = new object();
+        private readonly object sendLock = new object();
+        private readonly Queue<SendState> sendQueue = new Queue<SendState>();
 
-        // connection socket
         private Socket conn = null;
         private Socket pendingConnect = null;
 
-        // Receive() 중복 호출에 의한 중복 BeginReceive 방지
+        private int connectionGeneration = 0;
         private int receiveStarted = 0;
+        private bool sendInProgress = false;
 
-        // Close / Remote Close가 겹쳐도 OnClose는 1회만 발생
         private int closeNotified = 0;
         private int closing = 0;
         private int disposed = 0;
@@ -274,20 +383,39 @@ namespace AsyncSocket
         {
             this.id = id;
             this.conn = conn;
+
+            if (conn != null)
+                this.connectionGeneration = 1;
         }
 
         public Socket Connection
         {
-            get { return this.conn; }
-            set
+            get
             {
                 lock (syncRoot)
                 {
+                    return this.conn;
+                }
+            }
+            set
+            {
+                Socket oldSocket;
+
+                lock (syncRoot)
+                {
+                    oldSocket = this.conn;
                     this.conn = value;
+                    this.pendingConnect = null;
+                    Interlocked.Increment(ref connectionGeneration);
                     Interlocked.Exchange(ref receiveStarted, 0);
                     Interlocked.Exchange(ref closeNotified, 0);
                     Interlocked.Exchange(ref closing, 0);
                 }
+
+                ClearSendQueue();
+
+                if (oldSocket != null && !ReferenceEquals(oldSocket, value))
+                    SafeClose(oldSocket);
             }
         }
 
@@ -298,6 +426,7 @@ namespace AsyncSocket
         public bool Connect(string hostAddress, int port)
         {
             Socket client = null;
+            int generation = 0;
 
             try
             {
@@ -314,7 +443,6 @@ namespace AsyncSocket
                 if (ips == null || ips.Length == 0)
                     throw new SocketException((int)SocketError.HostNotFound);
 
-                // 기존 구현이 IPv4 Socket을 생성했던 동작을 우선 보존한다.
                 IPAddress selectedAddress = null;
 
                 for (int i = 0; i < ips.Length; i++)
@@ -337,12 +465,26 @@ namespace AsyncSocket
                     if (pendingConnect != null)
                         throw new InvalidOperationException("이미 연결을 시도 중입니다.");
 
+                    if (conn != null)
+                        throw new InvalidOperationException("이미 연결된 Socket이 존재합니다.");
+
+                    generation = Interlocked.Increment(ref connectionGeneration);
                     pendingConnect = client;
+
                     Interlocked.Exchange(ref closeNotified, 0);
                     Interlocked.Exchange(ref closing, 0);
+                    Interlocked.Exchange(ref receiveStarted, 0);
                 }
 
-                client.BeginConnect(remoteEP, OnConnectCallback, client);
+                ClearSendQueue();
+
+                ConnectState state = new ConnectState
+                {
+                    Socket = client,
+                    Generation = generation
+                };
+
+                client.BeginConnect(remoteEP, OnConnectCallback, state);
                 return true;
             }
             catch (Exception e)
@@ -359,40 +501,38 @@ namespace AsyncSocket
             }
         }
 
-        /// <summary>
-        /// 연결 요청 처리 콜백 함수
-        /// </summary>
         private void OnConnectCallback(IAsyncResult ar)
         {
-            Socket client = (Socket)ar.AsyncState;
+            ConnectState state = (ConnectState)ar.AsyncState;
+            Socket client = state.Socket;
 
             try
             {
                 client.EndConnect(ar);
 
-                if (Volatile.Read(ref disposed) != 0 || Volatile.Read(ref closing) != 0)
+                if (!IsCurrentGeneration(state.Generation) ||
+                    Volatile.Read(ref disposed) != 0 ||
+                    Volatile.Read(ref closing) != 0)
                 {
                     SafeClose(client);
                     return;
                 }
 
-                Socket oldConnection = null;
-
                 lock (syncRoot)
                 {
-                    if (ReferenceEquals(pendingConnect, client))
-                        pendingConnect = null;
+                    if (!ReferenceEquals(pendingConnect, client) ||
+                        state.Generation != Volatile.Read(ref connectionGeneration))
+                    {
+                        SafeClose(client);
+                        return;
+                    }
 
-                    oldConnection = conn;
+                    pendingConnect = null;
                     conn = client;
                 }
 
-                if (oldConnection != null && !ReferenceEquals(oldConnection, client))
-                    SafeClose(oldConnection);
-
                 Interlocked.Exchange(ref receiveStarted, 0);
 
-                // 먼저 수신 대기를 설정한 후 연결 완료를 알린다.
                 Receive();
 
                 AsyncSocketConnectionEventArgs cev =
@@ -402,15 +542,22 @@ namespace AsyncSocket
             }
             catch (Exception e)
             {
+                bool isCurrent;
+
                 lock (syncRoot)
                 {
-                    if (ReferenceEquals(pendingConnect, client))
+                    isCurrent =
+                        ReferenceEquals(pendingConnect, client) &&
+                        state.Generation == Volatile.Read(ref connectionGeneration);
+
+                    if (isCurrent)
                         pendingConnect = null;
                 }
 
                 SafeClose(client);
 
-                if (Volatile.Read(ref closing) == 0 &&
+                if (isCurrent &&
+                    Volatile.Read(ref closing) == 0 &&
                     Volatile.Read(ref disposed) == 0)
                 {
                     RaiseError(e);
@@ -428,15 +575,25 @@ namespace AsyncSocket
             {
                 ThrowIfDisposed();
 
-                Socket client = conn;
+                Socket client;
+                int generation;
+
+                lock (syncRoot)
+                {
+                    client = conn;
+                    generation = Volatile.Read(ref connectionGeneration);
+                }
 
                 if (client == null)
                     throw new InvalidOperationException("Socket이 연결되어 있지 않습니다.");
 
+                if (Volatile.Read(ref closing) != 0)
+                    return;
+
                 if (Interlocked.CompareExchange(ref receiveStarted, 1, 0) != 0)
                     return;
 
-                StateObject state = new StateObject(client);
+                StateObject state = new StateObject(client, generation);
                 BeginReceive(state);
             }
             catch (Exception e)
@@ -453,6 +610,12 @@ namespace AsyncSocket
 
         private void BeginReceive(StateObject state)
         {
+            if (!IsCurrentConnection(state.Worker, state.Generation))
+            {
+                Interlocked.Exchange(ref receiveStarted, 0);
+                return;
+            }
+
             state.Worker.BeginReceive(
                 state.Buffer,
                 0,
@@ -462,9 +625,6 @@ namespace AsyncSocket
                 state);
         }
 
-        /// <summary>
-        /// 데이터 수신 처리 콜백 함수
-        /// </summary>
         private void OnReceiveCallBack(IAsyncResult ar)
         {
             StateObject state = (StateObject)ar.AsyncState;
@@ -473,23 +633,33 @@ namespace AsyncSocket
             {
                 int bytesRead = state.Worker.EndReceive(ar);
 
-                if (bytesRead <= 0)
+                if (!IsCurrentConnection(state.Worker, state.Generation))
                 {
-                    // TCP에서 EndReceive == 0은 상대방의 정상 종료를 의미한다.
-                    Interlocked.Exchange(ref receiveStarted, 0);
-                    CompleteClose(state.Worker, true);
+                    SafeClose(state.Worker);
                     return;
                 }
 
+                if (bytesRead <= 0)
+                {
+                    Interlocked.Exchange(ref receiveStarted, 0);
+                    CompleteClose(state.Worker, state.Generation, true);
+                    return;
+                }
+
+                // 내부 320KB Buffer는 재사용하되, 이벤트에는 실제 수신 길이만큼만 복사한다.
+                // 이로써 다음 BeginReceive가 같은 Buffer를 덮어써도 EventArgs 데이터는 변하지 않는다.
+                byte[] receivedData = new byte[bytesRead];
+                Buffer.BlockCopy(state.Buffer, 0, receivedData, 0, bytesRead);
+
                 AsyncSocketReceiveEventArgs rev =
-                    new AsyncSocketReceiveEventArgs(this.id, bytesRead, state.Buffer);
+                    new AsyncSocketReceiveEventArgs(this.id, bytesRead, receivedData);
 
                 Received(rev);
 
                 if (Volatile.Read(ref closing) == 0 &&
-                    Volatile.Read(ref disposed) == 0)
+                    Volatile.Read(ref disposed) == 0 &&
+                    IsCurrentConnection(state.Worker, state.Generation))
                 {
-                    // 새 320KB StateObject를 매번 만들지 않고 동일 버퍼를 재사용한다.
                     BeginReceive(state);
                 }
                 else
@@ -499,30 +669,31 @@ namespace AsyncSocket
             }
             catch (ObjectDisposedException)
             {
-                Interlocked.Exchange(ref receiveStarted, 0);
-
-                if (Volatile.Read(ref closing) == 0 &&
-                    Volatile.Read(ref disposed) == 0)
-                {
-                    CompleteClose(state.Worker, true);
-                }
+                if (IsCurrentConnection(state.Worker, state.Generation))
+                    Interlocked.Exchange(ref receiveStarted, 0);
             }
             catch (Exception e)
             {
-                Interlocked.Exchange(ref receiveStarted, 0);
-
-                if (Volatile.Read(ref closing) == 0 &&
-                    Volatile.Read(ref disposed) == 0)
+                if (IsCurrentConnection(state.Worker, state.Generation))
                 {
-                    RaiseError(e);
-                    CompleteClose(state.Worker, true);
+                    Interlocked.Exchange(ref receiveStarted, 0);
+
+                    if (Volatile.Read(ref closing) == 0 &&
+                        Volatile.Read(ref disposed) == 0)
+                    {
+                        RaiseError(e);
+                        CompleteClose(state.Worker, state.Generation, true);
+                    }
+                }
+                else
+                {
+                    SafeClose(state.Worker);
                 }
             }
         }
 
         /// <summary>
-        /// 데이터 송신을 비동기적으로 처리한다.
-        /// EndSend가 일부 Byte만 전송하는 경우 남은 데이터까지 계속 전송한다.
+        /// 데이터 송신 요청을 Queue에 넣고 하나씩 직렬 처리한다.
         /// </summary>
         public bool Send(byte[] buffer)
         {
@@ -533,7 +704,14 @@ namespace AsyncSocket
                 if (buffer == null)
                     throw new ArgumentNullException(nameof(buffer));
 
-                Socket client = conn;
+                Socket client;
+                int generation;
+
+                lock (syncRoot)
+                {
+                    client = conn;
+                    generation = Volatile.Read(ref connectionGeneration);
+                }
 
                 if (client == null)
                     throw new InvalidOperationException("Socket이 연결되어 있지 않습니다.");
@@ -552,10 +730,26 @@ namespace AsyncSocket
                     Socket = client,
                     Buffer = buffer,
                     Offset = 0,
-                    TotalBytes = buffer.Length
+                    TotalBytes = buffer.Length,
+                    Generation = generation
                 };
 
-                BeginSend(state);
+                bool startNow = false;
+
+                lock (sendLock)
+                {
+                    sendQueue.Enqueue(state);
+
+                    if (!sendInProgress)
+                    {
+                        sendInProgress = true;
+                        startNow = true;
+                    }
+                }
+
+                if (startNow)
+                    StartNextSend();
+
                 return true;
             }
             catch (Exception e)
@@ -565,8 +759,59 @@ namespace AsyncSocket
             }
         }
 
+        private void StartNextSend()
+        {
+            SendState state = null;
+
+            lock (sendLock)
+            {
+                while (sendQueue.Count > 0)
+                {
+                    SendState candidate = sendQueue.Peek();
+
+                    if (IsCurrentConnection(candidate.Socket, candidate.Generation) &&
+                        Volatile.Read(ref closing) == 0 &&
+                        Volatile.Read(ref disposed) == 0)
+                    {
+                        state = candidate;
+                        break;
+                    }
+
+                    sendQueue.Dequeue();
+                }
+
+                if (state == null)
+                {
+                    sendInProgress = false;
+                    return;
+                }
+            }
+
+            try
+            {
+                BeginSend(state);
+            }
+            catch (Exception e)
+            {
+                bool report =
+                    IsCurrentConnection(state.Socket, state.Generation) &&
+                    Volatile.Read(ref closing) == 0 &&
+                    Volatile.Read(ref disposed) == 0;
+
+                RemoveCurrentSend(state);
+
+                if (report)
+                    RaiseError(e);
+
+                StartNextSend();
+            }
+        }
+
         private void BeginSend(SendState state)
         {
+            if (!IsCurrentConnection(state.Socket, state.Generation))
+                throw new InvalidOperationException("현재 연결과 다른 Socket의 Send 요청입니다.");
+
             state.Socket.BeginSend(
                 state.Buffer,
                 state.Offset,
@@ -576,9 +821,6 @@ namespace AsyncSocket
                 state);
         }
 
-        /// <summary>
-        /// 데이터 송신 처리 콜백 함수
-        /// </summary>
         private void OnSendCallBack(IAsyncResult ar)
         {
             SendState state = (SendState)ar.AsyncState;
@@ -586,6 +828,13 @@ namespace AsyncSocket
             try
             {
                 int bytesWritten = state.Socket.EndSend(ar);
+
+                if (!IsCurrentConnection(state.Socket, state.Generation))
+                {
+                    RemoveCurrentSend(state);
+                    StartNextSend();
+                    return;
+                }
 
                 if (bytesWritten <= 0)
                     throw new SocketException((int)SocketError.ConnectionReset);
@@ -598,27 +847,79 @@ namespace AsyncSocket
                     return;
                 }
 
+                RemoveCurrentSend(state);
+
                 AsyncSocketSendEventArgs sev =
                     new AsyncSocketSendEventArgs(this.id, state.Offset);
 
                 Sent(sev);
+                StartNextSend();
             }
             catch (ObjectDisposedException)
             {
-                // Close 중 발생하는 종료 예외는 정상적인 수명주기일 수 있으므로 무시한다.
-                if (Volatile.Read(ref closing) == 0 &&
-                    Volatile.Read(ref disposed) == 0)
-                {
+                bool report =
+                    IsCurrentGeneration(state.Generation) &&
+                    Volatile.Read(ref closing) == 0 &&
+                    Volatile.Read(ref disposed) == 0;
+
+                RemoveCurrentSend(state);
+
+                if (report)
                     RaiseError(new ObjectDisposedException("Socket"));
-                }
+
+                StartNextSend();
             }
             catch (Exception e)
             {
-                if (Volatile.Read(ref closing) == 0 &&
-                    Volatile.Read(ref disposed) == 0)
-                {
+                bool report =
+                    IsCurrentConnection(state.Socket, state.Generation) &&
+                    Volatile.Read(ref closing) == 0 &&
+                    Volatile.Read(ref disposed) == 0;
+
+                RemoveCurrentSend(state);
+
+                if (report)
                     RaiseError(e);
+
+                StartNextSend();
+            }
+        }
+
+        private void RemoveCurrentSend(SendState state)
+        {
+            lock (sendLock)
+            {
+                if (sendQueue.Count > 0 && ReferenceEquals(sendQueue.Peek(), state))
+                {
+                    sendQueue.Dequeue();
+                    return;
                 }
+
+                // 정상적으로는 발생하지 않지만 Queue 정합성이 깨졌을 때 해당 State만 제거한다.
+                if (sendQueue.Count > 0)
+                {
+                    Queue<SendState> temp = new Queue<SendState>();
+
+                    while (sendQueue.Count > 0)
+                    {
+                        SendState current = sendQueue.Dequeue();
+
+                        if (!ReferenceEquals(current, state))
+                            temp.Enqueue(current);
+                    }
+
+                    while (temp.Count > 0)
+                        sendQueue.Enqueue(temp.Dequeue());
+                }
+            }
+        }
+
+        private void ClearSendQueue()
+        {
+            lock (sendLock)
+            {
+                sendQueue.Clear();
+                sendInProgress = false;
             }
         }
 
@@ -627,8 +928,14 @@ namespace AsyncSocket
         /// </summary>
         public void Close()
         {
+            if (Volatile.Read(ref disposed) != 0)
+                return;
+
             if (Interlocked.CompareExchange(ref closing, 1, 0) != 0)
                 return;
+
+            // 이전 Connect/Receive/Send Callback을 모두 stale 상태로 만든다.
+            int closeGeneration = Interlocked.Increment(ref connectionGeneration);
 
             Socket client;
             Socket connecting;
@@ -640,12 +947,19 @@ namespace AsyncSocket
                 pendingConnect = null;
             }
 
-            // 연결 진행 중인 Socket도 함께 정리한다.
+            ClearSendQueue();
+            Interlocked.Exchange(ref receiveStarted, 0);
+
             if (connecting != null && !ReferenceEquals(connecting, client))
                 SafeClose(connecting);
 
             if (client == null)
             {
+                lock (syncRoot)
+                {
+                    conn = null;
+                }
+
                 NotifyClosedOnce();
                 return;
             }
@@ -658,18 +972,29 @@ namespace AsyncSocket
                 }
                 catch (SocketException)
                 {
-                    // 이미 원격 종료된 Socket일 수 있다.
                 }
                 catch (ObjectDisposedException)
                 {
-                    // 이미 종료된 Socket일 수 있다.
                 }
 
-                client.BeginDisconnect(false, OnCloseCallBack, client);
+                client.BeginDisconnect(
+                    false,
+                    OnCloseCallBack,
+                    new ConnectState
+                    {
+                        Socket = client,
+                        Generation = closeGeneration
+                    });
             }
             catch (Exception e)
             {
                 SafeClose(client);
+
+                lock (syncRoot)
+                {
+                    if (ReferenceEquals(conn, client))
+                        conn = null;
+                }
 
                 if (!(e is ObjectDisposedException))
                     RaiseError(e);
@@ -678,12 +1003,10 @@ namespace AsyncSocket
             }
         }
 
-        /// <summary>
-        /// 소켓 연결 종료를 처리하는 콜백 함수
-        /// </summary>
         private void OnCloseCallBack(IAsyncResult ar)
         {
-            Socket client = (Socket)ar.AsyncState;
+            ConnectState state = (ConnectState)ar.AsyncState;
+            Socket client = state.Socket;
 
             try
             {
@@ -691,11 +1014,9 @@ namespace AsyncSocket
             }
             catch (ObjectDisposedException)
             {
-                // 이미 닫힌 경우 정상 종료로 간주
             }
             catch (SocketException e)
             {
-                // 종료 중 이미 연결이 사라진 경우가 많으므로 로그/이벤트만 남긴다.
                 if (Volatile.Read(ref disposed) == 0)
                     RaiseError(e);
             }
@@ -707,7 +1028,6 @@ namespace AsyncSocket
             finally
             {
                 SafeClose(client);
-                Interlocked.Exchange(ref receiveStarted, 0);
 
                 lock (syncRoot)
                 {
@@ -715,16 +1035,27 @@ namespace AsyncSocket
                         conn = null;
                 }
 
+                ClearSendQueue();
+                Interlocked.Exchange(ref receiveStarted, 0);
                 NotifyClosedOnce();
             }
         }
 
-        private void CompleteClose(Socket client, bool notify)
+        private void CompleteClose(Socket client, int generation, bool notify)
         {
             if (client == null)
                 return;
 
+            // 오래된 연결의 callback이 새 연결을 닫지 못하도록 현재 Socket인지 먼저 검사한다.
+            if (!IsCurrentConnection(client, generation))
+            {
+                SafeClose(client);
+                return;
+            }
+
             Interlocked.Exchange(ref closing, 1);
+            Interlocked.Increment(ref connectionGeneration);
+
             SafeClose(client);
 
             lock (syncRoot)
@@ -736,8 +1067,28 @@ namespace AsyncSocket
                     pendingConnect = null;
             }
 
+            ClearSendQueue();
+            Interlocked.Exchange(ref receiveStarted, 0);
+
             if (notify)
                 NotifyClosedOnce();
+        }
+
+        private bool IsCurrentConnection(Socket socket, int generation)
+        {
+            if (socket == null)
+                return false;
+
+            lock (syncRoot)
+            {
+                return ReferenceEquals(conn, socket) &&
+                       generation == Volatile.Read(ref connectionGeneration);
+            }
+        }
+
+        private bool IsCurrentGeneration(int generation)
+        {
+            return generation == Volatile.Read(ref connectionGeneration);
         }
 
         private void NotifyClosedOnce()
@@ -770,7 +1121,6 @@ namespace AsyncSocket
             }
             catch
             {
-                // 자원 정리 단계에서는 Close 예외를 외부로 전파하지 않는다.
             }
         }
 
@@ -786,6 +1136,7 @@ namespace AsyncSocket
                 return;
 
             Interlocked.Exchange(ref closing, 1);
+            Interlocked.Increment(ref connectionGeneration);
 
             Socket client;
             Socket connecting;
@@ -798,11 +1149,13 @@ namespace AsyncSocket
                 pendingConnect = null;
             }
 
+            ClearSendQueue();
+            Interlocked.Exchange(ref receiveStarted, 0);
+
             if (connecting != null && !ReferenceEquals(connecting, client))
                 SafeClose(connecting);
 
             SafeClose(client);
-            Interlocked.Exchange(ref receiveStarted, 0);
 
             GC.SuppressFinalize(this);
         }
@@ -873,9 +1226,6 @@ namespace AsyncSocket
             }
         }
 
-        /// <summary>
-        /// Client의 접속을 비동기적으로 대기한다.
-        /// </summary>
         private void StartAccept()
         {
             try
@@ -884,7 +1234,12 @@ namespace AsyncSocket
                     Volatile.Read(ref disposed) != 0)
                     return;
 
-                Socket target = listener;
+                Socket target;
+
+                lock (syncRoot)
+                {
+                    target = listener;
+                }
 
                 if (target == null)
                     return;
@@ -909,13 +1264,11 @@ namespace AsyncSocket
             }
         }
 
-        /// <summary>
-        /// Client의 비동기 접속을 처리한다.
-        /// </summary>
         private void OnListenCallBack(IAsyncResult ar)
         {
             Socket acceptListener = (Socket)ar.AsyncState;
             Socket worker = null;
+            bool continueAccept = false;
 
             try
             {
@@ -928,21 +1281,22 @@ namespace AsyncSocket
                     return;
                 }
 
+                continueAccept = true;
+
                 AsyncSocketAcceptEventArgs aev =
                     new AsyncSocketAcceptEventArgs(worker);
 
+                // Accepted 내부는 구독자별 예외 격리되어 있으므로,
+                // 특정 OnAccept Handler 오류로 Accept Loop가 중단되지 않는다.
                 Accepted(aev);
-
-                // 다시 새로운 클라이언트의 접속을 기다린다.
-                StartAccept();
             }
             catch (ObjectDisposedException)
             {
-                // Stop()에 의한 listener.Close() 후 callback 진입은 정상 종료 흐름이다.
                 if (Volatile.Read(ref stopping) == 0 &&
                     Volatile.Read(ref disposed) == 0)
                 {
                     RaiseError(new ObjectDisposedException("listener"));
+                    continueAccept = true;
                 }
             }
             catch (Exception e)
@@ -954,8 +1308,15 @@ namespace AsyncSocket
                     Volatile.Read(ref disposed) == 0)
                 {
                     RaiseError(e);
-
-                    // 예상하지 못한 Accept 오류 후에도 Listener가 살아 있으면 다시 Accept를 시도한다.
+                    continueAccept = true;
+                }
+            }
+            finally
+            {
+                if (continueAccept &&
+                    Volatile.Read(ref stopping) == 0 &&
+                    Volatile.Read(ref disposed) == 0)
+                {
                     StartAccept();
                 }
             }
@@ -996,7 +1357,6 @@ namespace AsyncSocket
             }
             catch
             {
-                // 종료 단계의 Close 예외는 무시한다.
             }
         }
 
