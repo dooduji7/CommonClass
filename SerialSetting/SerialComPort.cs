@@ -1,36 +1,32 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text;
-
-using System.IO.Ports;
-using System.Threading;
 using System.Diagnostics;
-
+using System.IO.Ports;
+using System.Text;
 
 namespace SerialHandler
 {
-    //20260817 최신소스 변경
-    #region 이벤트 관련 클레스
+    #region 이벤트 관련 클래스
+
     public class PortEventArgs : EventArgs
     {
         /// <summary>
         /// 이벤트에 사용할 문자 저장.
         /// </summary>
-        private string strRecvData;
+        private readonly string strRecvData;
 
         public PortEventArgs()
+            : this(string.Empty)
         {
-            this.strRecvData = "";
         }
 
         /// <summary>
-        ///  이벤트에서 데이터 저장하기 위한 생성자.
+        /// 이벤트에서 데이터 저장하기 위한 생성자.
         /// </summary>
         /// <param name="strData"></param>
-
         public PortEventArgs(string strData)
         {
-            this.strRecvData = strData;
+            this.strRecvData = strData ?? string.Empty;
         }
 
         /// <summary>
@@ -42,72 +38,82 @@ namespace SerialHandler
             return this.strRecvData;
         }
     }
+
     #endregion
 
-
-    public class SerialComProt
+    public class SerialComProt : IDisposable
     {
         #region Field
 
+        private const char STX = (char)0x02;
+        private const char ETX = (char)0x03;
+
         /// <summary>
-        /// 통신 포트 
+        /// 통신 포트
         /// </summary>
-        private SerialPort m_Port = new SerialPort();
+        private readonly SerialPort m_Port = new SerialPort();
+
         /// <summary>
         /// 이벤트에 사용될 델리게이트
         /// </summary>
         /// <param name="send"></param>
         /// <param name="args"></param>
         public delegate void ComPortEventHandler(object send, PortEventArgs args);
+
         /// <summary>
         /// 이벤트 등록
         /// </summary>
         public event ComPortEventHandler DataRecv;
 
-        private List<ComPortEventHandler> hdls = new List<ComPortEventHandler>();
-        /// <summary>
-        /// stx/etx 사용 여부
-        /// </summary>
-        private bool m_bSTX_ETX = false;
-        /// <summary>
-        /// 데이터 저장.
-        /// </summary>
-        private string m_strRecvDataSave = "";
+        private readonly List<ComPortEventHandler> hdls = new List<ComPortEventHandler>();
+        private readonly object m_eventLock = new object();
+        private readonly object m_recvLock = new object();
+        private readonly StringBuilder m_recvBuffer = new StringBuilder();
 
-        bool m_bAuto = false;
-        string m_strErr;
+        /// <summary>
+        /// STX/ETX 사용 여부
+        /// </summary>
+        private bool m_bSTX_ETX;
+
+        private bool m_bAuto;
+        private bool m_isDataReceivedRegistered;
+        private bool m_disposed;
+        private string m_strErr = string.Empty;
 
         #endregion
 
         #region Constructor
 
         /// <summary>
-        /// 데이터 자동으로 읽어 이벤트 발생할지...
+        /// 데이터 자동으로 읽어 이벤트 발생할지 설정한다.
         /// </summary>
         /// <param name="bStart"></param>
         public SerialComProt(bool bStart)
         {
-            if (bStart)
-                m_Port.DataReceived += new SerialDataReceivedEventHandler(m_Port_DataReceived);
+            SetAutoReadEvent(bStart);
         }
 
         /// <summary>
-        /// 생성과 동시에 시리얼 포트의 이벤트를 등록 한다.
+        /// 기본 생성자.
+        /// 기존 동작과 동일하게 자동 수신 이벤트는 등록하지 않는다.
         /// </summary>
         public SerialComProt()
         {
-            if (m_bAuto)
-                // 데이터를 받을 이벤트 등록.
-                m_Port.DataReceived += new SerialDataReceivedEventHandler(m_Port_DataReceived);
+            SetAutoReadEvent(false);
         }
 
         #endregion
 
+        #region Event Management
+
         public void AddEvent(ComPortEventHandler h)
         {
+            if (h == null)
+                return;
+
             lock (hdls)
             {
-                this.DataRecv += h;
+                DataRecv += h;
                 hdls.Add(h);
             }
         }
@@ -118,25 +124,25 @@ namespace SerialHandler
             {
                 foreach (ComPortEventHandler h in hdls)
                 {
-                    this.DataRecv -= h;   
+                    DataRecv -= h;
                 }
+
                 hdls.Clear();
             }
         }
 
-        /*********************************************************************************************************************************/
+        #endregion
+
         #region Property
-        /*********************************************************************************************************************************/
 
         /// <summary>
         /// 데이터 자동으로 읽기 여부(이벤트 발생 여부)
+        /// 설정값 변경 시 실제 SerialPort.DataReceived 이벤트도 등록/해제한다.
         /// </summary>
         public bool AutoReadEvent
         {
-            set
-            {
-                m_bAuto = value;
-            }
+            get { return m_bAuto; }
+            set { SetAutoReadEvent(value); }
         }
 
         /// <summary>
@@ -144,7 +150,6 @@ namespace SerialHandler
         /// </summary>
         public string Name
         {
-
             get { return m_Port.PortName; }
             set { m_Port.PortName = value; }
         }
@@ -159,7 +164,8 @@ namespace SerialHandler
         }
 
         /// <summary>
-        ///  종료 비트 설정
+        /// 종료 비트 설정
+        /// 0=None, 1=One, 2=Two, 3=OnePointFive
         /// </summary>
         public int StopBit
         {
@@ -169,25 +175,29 @@ namespace SerialHandler
                 switch (value)
                 {
                     case 0:
-                        m_Port.StopBits = StopBits.None; //  정지 비트를 사용하지 않는다.
+                        m_Port.StopBits = StopBits.None;
                         break;
                     case 1:
-                        m_Port.StopBits = StopBits.One;  //  1비트의 정지 비트를 사용. 
+                        m_Port.StopBits = StopBits.One;
                         break;
                     case 2:
-                        m_Port.StopBits = StopBits.Two;  // 2비트의 정지 비트를 사용. 
+                        m_Port.StopBits = StopBits.Two;
                         break;
                     case 3:
-                        m_Port.StopBits = StopBits.OnePointFive;  // 1.5비트의 정지 비트를 사용.
+                        m_Port.StopBits = StopBits.OnePointFive;
                         break;
                     default:
-                        break;
+                        throw new ArgumentOutOfRangeException(
+                            nameof(value),
+                            value,
+                            "StopBit은 0~3 범위여야 합니다.");
                 }
             }
         }
 
         /// <summary>
-        /// 페리티 설정
+        /// 패리티 설정
+        /// 0=None, 1=Odd, 2=Even, 3=Mark, 4=Space
         /// </summary>
         public int Paritys
         {
@@ -197,24 +207,26 @@ namespace SerialHandler
                 switch (value)
                 {
                     case 0:
-                        m_Port.Parity = Parity.None;  // 패리티 검사를 수행하지 않는다. 
+                        m_Port.Parity = Parity.None;
                         break;
                     case 1:
-                        m_Port.Parity = Parity.Odd;  // 비트 집합의 비트 합계가 홀수가 되도록 패리티 비트를 설정.
+                        m_Port.Parity = Parity.Odd;
                         break;
                     case 2:
-                        m_Port.Parity = Parity.Even;  // 비트 집합의 비트 합계가 짝수가 되도록 패리티 비트를 설정.
+                        m_Port.Parity = Parity.Even;
                         break;
                     case 3:
-                        m_Port.Parity = Parity.Mark;  // 패리티 비트를 1로 설정된 상태로 유지.
+                        m_Port.Parity = Parity.Mark;
                         break;
                     case 4:
-                        m_Port.Parity = Parity.Space;  // 패리티 비트를 0으로 설정된 상태로 유지.
+                        m_Port.Parity = Parity.Space;
                         break;
                     default:
-                        break;
+                        throw new ArgumentOutOfRangeException(
+                            nameof(value),
+                            value,
+                            "Paritys는 0~4 범위여야 합니다.");
                 }
-
             }
         }
 
@@ -229,6 +241,7 @@ namespace SerialHandler
 
         /// <summary>
         /// 통신 제어 설정
+        /// 0=None, 1=XOnXOff, 2=RequestToSend, 3=RequestToSendXOnXOff
         /// </summary>
         public int Flow
         {
@@ -238,19 +251,22 @@ namespace SerialHandler
                 switch (value)
                 {
                     case 0:
-                        m_Port.Handshake = Handshake.None; // 핸드쉐이크를 사용하지 않는다.
+                        m_Port.Handshake = Handshake.None;
                         break;
                     case 1:
-                        m_Port.Handshake = Handshake.XOnXOff; // XON/XOFF 소프트웨어 제어 프로토콜을 사용.
+                        m_Port.Handshake = Handshake.XOnXOff;
                         break;
                     case 2:
-                        m_Port.Handshake = Handshake.RequestToSend;  // RTS(Request to Send) 하드웨어 흐름 제어를 사용.
+                        m_Port.Handshake = Handshake.RequestToSend;
                         break;
                     case 3:
-                        m_Port.Handshake = Handshake.RequestToSendXOnXOff; // RTS(Request to Send) 하드웨어 제어와 XON/XOFF 소프트웨어 제어를 모두 사용.
+                        m_Port.Handshake = Handshake.RequestToSendXOnXOff;
                         break;
                     default:
-                        break;
+                        throw new ArgumentOutOfRangeException(
+                            nameof(value),
+                            value,
+                            "Flow는 0~3 범위여야 합니다.");
                 }
             }
         }
@@ -260,24 +276,41 @@ namespace SerialHandler
         /// </summary>
         public bool STXETX
         {
-            set { m_bSTX_ETX = value; }
             get { return m_bSTX_ETX; }
+            set
+            {
+                if (m_bSTX_ETX == value)
+                    return;
+
+                m_bSTX_ETX = value;
+
+                lock (m_recvLock)
+                {
+                    m_recvBuffer.Clear();
+                }
+            }
         }
+
         /// <summary>
-        /// 통신할때 false 일때 에러 코드값
+        /// 통신 실패 시 마지막 에러 메시지
         /// </summary>
         public string ErrMsg
         {
             get { return m_strErr; }
-            set { m_strErr = value; }
+            set { m_strErr = value ?? string.Empty; }
+        }
+
+        /// <summary>
+        /// 연결 확인
+        /// </summary>
+        public bool IsOpen
+        {
+            get { return m_Port.IsOpen; }
         }
 
         #endregion
-        /*********************************************************************************************************************************/
 
-        /*********************************************************************************************************************************/
-        #region Metheds
-        /*********************************************************************************************************************************/
+        #region Methods
 
         /// <summary>
         /// 포트 오픈
@@ -287,21 +320,25 @@ namespace SerialHandler
         {
             try
             {
+                ThrowIfDisposed();
+
                 Debug.WriteLine("Port Open start");
+
                 if (!m_Port.IsOpen)
                     m_Port.Open();
-                Debug.WriteLine("Port Opend !");
+
+                ErrMsg = string.Empty;
+                Debug.WriteLine("Port Opened !");
 
                 return true;
             }
-            catch (System.UnauthorizedAccessException ex)
+            catch (Exception ex)
             {
                 ErrMsg = ex.Message;
+                Debug.WriteLine("[SerialHandler] PortOpen Error : " + ex);
                 return false;
             }
         }
-
-        /*-------------------------------------------------------------------------------------------------*/
 
         /// <summary>
         /// 포트 종료
@@ -309,46 +346,44 @@ namespace SerialHandler
         public void PortClose()
         {
             Debug.WriteLine("Port Close start");
-       
+
             try
             {
-                m_Port.Close();
+                if (m_Port.IsOpen)
+                    m_Port.Close();
 
+                lock (m_recvLock)
+                {
+                    m_recvBuffer.Clear();
+                }
+
+                ErrMsg = string.Empty;
+                Debug.WriteLine("Port Closed !");
             }
             catch (Exception ex)
             {
-                Debug.Assert(false, ex.StackTrace);
-                throw;
-            }
-
-            Debug.WriteLine("Port Closed !");
-        }
-
-        /*-------------------------------------------------------------------------------------------------*/
-
-        /// <summary>
-        /// 연결 확인
-        /// </summary>
-        public bool IsOpen
-        {
-            get
-            {
-                return m_Port.IsOpen;
+                ErrMsg = ex.Message;
+                Debug.WriteLine("[SerialHandler] PortClose Error : " + ex);
             }
         }
 
-        /*-------------------------------------------------------------------------------------------------*/
-
         /// <summary>
-        /// 데이터 보내기
+        /// 문자열 데이터 보내기
         /// </summary>
-        /// <param name="strData"></param>
-        /// <returns></returns>
         public bool DataSend(string strSendData)
         {
+            if (strSendData == null)
+            {
+                ErrMsg = "전송할 문자열 데이터가 null 입니다.";
+                return false;
+            }
+
             try
             {
+                ThrowIfDisposed();
+
                 m_Port.Write(strSendData);
+                ErrMsg = string.Empty;
                 return true;
             }
             catch (Exception ex)
@@ -358,18 +393,23 @@ namespace SerialHandler
             }
         }
 
-        /*-------------------------------------------------------------------------------------------------*/
-
         /// <summary>
-        /// 데이터 보내기
+        /// Byte 배열 데이터 보내기
         /// </summary>
-        /// <param name="bData"></param>
-        /// <returns></returns>
         public bool DataSend(byte[] bSendData)
         {
+            if (bSendData == null)
+            {
+                ErrMsg = "전송할 Byte 데이터가 null 입니다.";
+                return false;
+            }
+
             try
             {
+                ThrowIfDisposed();
+
                 m_Port.Write(bSendData, 0, bSendData.Length);
+                ErrMsg = string.Empty;
                 return true;
             }
             catch (Exception ex)
@@ -379,18 +419,23 @@ namespace SerialHandler
             }
         }
 
-        /*-------------------------------------------------------------------------------------------------*/
-
         /// <summary>
-        /// 데이터 보내기
+        /// Char 배열 데이터 보내기
         /// </summary>
-        /// <param name="cSendData"></param>
-        /// <returns></returns>
         public bool DataSend(char[] cSendData)
         {
+            if (cSendData == null)
+            {
+                ErrMsg = "전송할 Char 데이터가 null 입니다.";
+                return false;
+            }
+
             try
             {
+                ThrowIfDisposed();
+
                 m_Port.Write(cSendData, 0, cSendData.Length);
+                ErrMsg = string.Empty;
                 return true;
             }
             catch (Exception ex)
@@ -400,44 +445,63 @@ namespace SerialHandler
             }
         }
 
-        /*-------------------------------------------------------------------------------------------------*/
-
         /// <summary>
-        /// 데이터 읽어오기.(이벤트 등록 안했을때...)
+        /// 데이터 읽어오기.(이벤트 등록 안했을 때)
         /// </summary>
-        /// <param name="strReadData"></param>
-        /// <returns>false 이면 strReadData는 에러 메세지 등록</returns>
+        /// <returns>false이면 ErrMsg에 오류 메시지가 저장된다.</returns>
         public bool DataRead(out string strReadData)
         {
             try
             {
+                ThrowIfDisposed();
+
                 strReadData = m_Port.ReadExisting();
-                m_Port.DiscardInBuffer();
+                ErrMsg = string.Empty;
                 return true;
             }
             catch (Exception ex)
             {
                 ErrMsg = ex.Message;
-                strReadData = "";
+                strReadData = string.Empty;
                 return false;
             }
-
         }
 
-        /*-------------------------------------------------------------------------------------------------*/
-
         /// <summary>
-        /// 데이터 읽어오기.(이벤트 등록 안했을때...)
+        /// Byte 데이터 읽어오기.(이벤트 등록 안했을 때)
+        /// 문자열 Encoding 변환 없이 실제 수신 Byte를 직접 읽는다.
         /// </summary>
-        /// <param name="bData"></param>
-        /// <returns></returns>
         public bool DataRead(out byte[] bReadData)
         {
             try
             {
-                string strData;
-                strData = m_Port.ReadExisting();
-                bReadData = Encoding.Default.GetBytes(strData);
+                ThrowIfDisposed();
+
+                int bytesToRead = m_Port.BytesToRead;
+
+                if (bytesToRead <= 0)
+                {
+                    bReadData = new byte[0];
+                    ErrMsg = string.Empty;
+                    return true;
+                }
+
+                byte[] buffer = new byte[bytesToRead];
+                int read = m_Port.Read(buffer, 0, buffer.Length);
+
+                if (read == buffer.Length)
+                {
+                    bReadData = buffer;
+                }
+                else
+                {
+                    bReadData = new byte[read];
+
+                    if (read > 0)
+                        Buffer.BlockCopy(buffer, 0, bReadData, 0, read);
+                }
+
+                ErrMsg = string.Empty;
                 return true;
             }
             catch (Exception ex)
@@ -449,93 +513,190 @@ namespace SerialHandler
         }
 
         #endregion
-        /*********************************************************************************************************************************/
 
-        /*********************************************************************************************************************************/
         #region Events
-        /*********************************************************************************************************************************/
 
         /// <summary>
-        /// 시리얼에서 데이터를 받으면 검사하여 이밴트 발생
+        /// 시리얼 데이터 수신 이벤트.
+        /// DataReceived 이벤트 1회가 패킷 1개라는 가정을 하지 않는다.
+        /// STX/ETX 모드에서는 내부 버퍼에 누적 후 완성된 프레임만 전달한다.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        void m_Port_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        private void m_Port_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
             try
             {
-                string strData;
-                if (m_bSTX_ETX)
+                if (m_disposed || !m_Port.IsOpen)
+                    return;
+
+                string receivedData = m_Port.ReadExisting();
+
+                if (string.IsNullOrEmpty(receivedData))
+                    return;
+
+                if (!m_bSTX_ETX)
                 {
-                    int nSTX, nETX;
-                    nSTX = 2;
-                    nETX = 3;
-                    char cIndex;
-                    cIndex = (char)nSTX;
-                    Thread.Sleep(200);
-                    strData = m_Port.ReadExisting();
-                    int nStart = strData.IndexOf(cIndex);
-                    if (nStart == -1)   // stx 가 없다...// etx 가 올때 까지 저장.
+                    RaiseDataRecv(receivedData);
+                    return;
+                }
+
+                List<string> frames = ExtractFrames(receivedData);
+
+                foreach (string frame in frames)
+                {
+                    RaiseDataRecv(frame);
+                }
+            }
+            catch (Exception ex)
+            {
+                ErrMsg = ex.Message;
+                Debug.WriteLine("[SerialHandler] DataReceived Error : " + ex);
+            }
+        }
+
+        /// <summary>
+        /// STX/ETX 기반으로 완성된 프레임을 모두 추출한다.
+        /// 완성되지 않은 프레임은 다음 DataReceived까지 내부 버퍼에 유지한다.
+        /// </summary>
+        private List<string> ExtractFrames(string receivedData)
+        {
+            List<string> frames = new List<string>();
+
+            lock (m_recvLock)
+            {
+                m_recvBuffer.Append(receivedData);
+
+                while (m_recvBuffer.Length > 0)
+                {
+                    string bufferText = m_recvBuffer.ToString();
+                    int startIndex = bufferText.IndexOf(STX);
+
+                    if (startIndex < 0)
                     {
-                        cIndex = (char)nETX;
-                        int nEnd = strData.IndexOf(cIndex);
-                        if (nEnd == -1) // etx 가 없으면 아직 데이터가 다 도착 하지 않았다.
-                        {
-                            //m_strRecvDataSave += strData;   // 데이터 저장 하고 나간다.
-                            return;
-                        }
-                        else  // etx 가 있다.
-                        {
-                            //m_strRecvDataSave += strData;
-                            //PortEventArgs a = new PortEventArgs(m_strRecvDataSave);     // 이벤트 발생하기 위한 데이터값 저장.
-                            //DataRecv(this, a);                                          // 이벤트 발생.
-                            //m_strRecvDataSave = "";
-                            return;     // 정상적으로 데이터가 모였으니까...
-                        }
+                        // STX 이전의 잡음 데이터는 프레임으로 사용할 수 없으므로 제거한다.
+                        m_recvBuffer.Clear();
+                        break;
                     }
-                    else  // stx 가 있다. 
+
+                    if (startIndex > 0)
                     {
-                        string strTemp1, strTemp2;
-                        strTemp1 = strData.Substring(nStart + 1);
-                        strData = strTemp1;
-                        cIndex = (char)nETX;
-                        int nEnd = strData.IndexOf(cIndex);
-                        if (nEnd == -1) // etx 가 있는지 검사. 없으면 저장 하고 종료.
-                        {
-                            //m_strRecvDataSave += strData;
-                            return;
-                        }
-                        else  // etx 가 있다.
-                        {
-                            strTemp2 = strData.Substring(0, nEnd);
-                            strData = strTemp2;
-                            //m_strRecvDataSave += strData;
-                            PortEventArgs a = new PortEventArgs(strData);     // 이벤트 발생하기 위한 데이터값 저장.
-                            DataRecv(this, a);                                          // 이벤트 발생.
-                            m_strRecvDataSave = "";
-                            return;
-                        }
+                        // STX 이전의 불필요한 데이터를 제거한다.
+                        m_recvBuffer.Remove(0, startIndex);
+                        bufferText = m_recvBuffer.ToString();
+                    }
+
+                    int endIndex = bufferText.IndexOf(ETX, 1);
+
+                    if (endIndex < 0)
+                    {
+                        // ETX가 아직 도착하지 않았으므로 다음 수신까지 보관한다.
+                        break;
+                    }
+
+                    string frame = bufferText.Substring(1, endIndex - 1);
+                    frames.Add(frame);
+
+                    // 처리 완료한 STX ~ ETX 영역을 버퍼에서 제거한다.
+                    m_recvBuffer.Remove(0, endIndex + 1);
+                }
+            }
+
+            return frames;
+        }
+
+        private void RaiseDataRecv(string data)
+        {
+            ComPortEventHandler handler = DataRecv;
+
+            if (handler == null)
+                return;
+
+            PortEventArgs args = new PortEventArgs(data);
+
+            foreach (ComPortEventHandler subscriber in handler.GetInvocationList())
+            {
+                try
+                {
+                    subscriber(this, args);
+                }
+                catch (Exception ex)
+                {
+                    // 한 구독자의 예외가 다른 구독자의 이벤트 전달을 막지 않도록 한다.
+                    Debug.WriteLine("[SerialHandler] DataRecv Handler Error : " + ex);
+                }
+            }
+        }
+
+        #endregion
+
+        #region Private Methods
+
+        private void SetAutoReadEvent(bool enabled)
+        {
+            lock (m_eventLock)
+            {
+                m_bAuto = enabled;
+
+                if (enabled)
+                {
+                    if (!m_isDataReceivedRegistered)
+                    {
+                        m_Port.DataReceived += m_Port_DataReceived;
+                        m_isDataReceivedRegistered = true;
                     }
                 }
                 else
                 {
-                    Thread.Sleep(200);
-                    strData = m_Port.ReadExisting();
-                    PortEventArgs a = new PortEventArgs(strData);   // 이벤트 발생하기 위한 데이터값 저장.
-                    DataRecv(this, a);                              // 이벤트 발생.
+                    if (m_isDataReceivedRegistered)
+                    {
+                        m_Port.DataReceived -= m_Port_DataReceived;
+                        m_isDataReceivedRegistered = false;
+                    }
                 }
-
-                //throw new Exception("The method or operation is not implemented.");
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("[YJ] "+ex.StackTrace);
-            }
+        }
 
+        private void ThrowIfDisposed()
+        {
+            if (m_disposed)
+                throw new ObjectDisposedException(nameof(SerialComProt));
         }
 
         #endregion
-        /*********************************************************************************************************************************/
-        
+
+        #region IDisposable
+
+        public void Dispose()
+        {
+            if (m_disposed)
+                return;
+
+            try
+            {
+                ClearEvent();
+                SetAutoReadEvent(false);
+
+                if (m_Port.IsOpen)
+                    m_Port.Close();
+
+                m_Port.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("[SerialHandler] Dispose Error : " + ex);
+            }
+            finally
+            {
+                lock (m_recvLock)
+                {
+                    m_recvBuffer.Clear();
+                }
+
+                m_disposed = true;
+            }
+
+            GC.SuppressFinalize(this);
+        }
+
+        #endregion
     }
 }
