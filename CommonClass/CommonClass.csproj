@@ -102,6 +102,10 @@
       <Project>{507443b6-854c-49b0-a8c0-bde1413e15af}</Project>
       <Name>SocketClient</Name>
     </ProjectReference>
+    <ProjectReference Include="..\JobHandler\JobHandler.csproj">
+      <Project>{4f387e6b-244e-46a1-99e0-e0dc8b041b1d}</Project>
+      <Name>JobHandler</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

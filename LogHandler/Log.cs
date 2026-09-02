@@ -19,6 +19,9 @@ namespace LogHandler
     /// </summary>
     public class Log : IDisposable
     {
+        public const int DefaultStopTimeoutMilliseconds = 5000;
+        public const int DefaultMaxQueueSize = 10000;
+
         #region Member
 
         private static readonly object s_instanceLock = new object();
@@ -88,6 +91,9 @@ namespace LogHandler
         /// 0 = Active, 1 = Disposed
         /// </summary>
         private int m_disposeState;
+        private int m_eventDisposeState;
+        private int m_maxQueueSize = DefaultMaxQueueSize;
+        private long m_droppedLogCount;
 
         #endregion
 
@@ -129,6 +135,32 @@ namespace LogHandler
             {
                 m_iDelTerm = value;
             }
+        }
+
+        public int MaxQueueSize
+        {
+            get
+            {
+                lock (m_objQueueLock)
+                {
+                    return m_maxQueueSize;
+                }
+            }
+            set
+            {
+                if (value <= 0)
+                    throw new ArgumentOutOfRangeException(nameof(value));
+
+                lock (m_objQueueLock)
+                {
+                    m_maxQueueSize = value;
+                }
+            }
+        }
+
+        public long DroppedLogCount
+        {
+            get { return Interlocked.Read(ref m_droppedLogCount); }
         }
 
         #endregion
@@ -273,6 +305,7 @@ namespace LogHandler
                     new ThreadStart(LogWriteProcess));
 
             m_threadLog.Name = "LogHandler.LogWriteProcess";
+            m_threadLog.IsBackground = true;
             m_threadLog.Start();
 
             // 시작 직후 Queue 확인 및 오래된 로그 정리를 수행하도록 깨운다.
@@ -286,11 +319,19 @@ namespace LogHandler
         /// </summary>
         public void Dispose()
         {
-            if (Interlocked.Exchange(
-                    ref m_disposeState,
-                    1) != 0)
+            Stop(DefaultStopTimeoutMilliseconds);
+            GC.SuppressFinalize(this);
+        }
+
+        public bool Stop(int timeoutMilliseconds)
+        {
+            if (timeoutMilliseconds < Timeout.Infinite)
+                throw new ArgumentOutOfRangeException(nameof(timeoutMilliseconds));
+
+            if (Interlocked.Exchange(ref m_disposeState, 1) != 0)
             {
-                return;
+                Thread existingThread = m_threadLog;
+                return existingThread == null || !existingThread.IsAlive;
             }
 
             m_bCloseHandler = true;
@@ -302,7 +343,7 @@ namespace LogHandler
             }
             catch (ObjectDisposedException)
             {
-                return;
+                return true;
             }
 
             Thread thread = m_threadLog;
@@ -310,12 +351,20 @@ namespace LogHandler
             if (thread != null &&
                 thread != Thread.CurrentThread)
             {
-                // Queue에 남아 있는 로그까지 처리한 후 종료
-                thread.Join();
+                // Queue에 남아 있는 로그를 처리하되 종료를 무기한 기다리지 않는다.
+                if (!thread.Join(timeoutMilliseconds))
+                    return false;
             }
 
             m_threadLog = null;
-            m_avtLogEvent.Dispose();
+            DisposeLogEvent();
+            return true;
+        }
+
+        private void DisposeLogEvent()
+        {
+            if (Interlocked.Exchange(ref m_eventDisposeState, 1) == 0)
+                m_avtLogEvent.Dispose();
         }
 
         #endregion
@@ -503,6 +552,12 @@ namespace LogHandler
                     return;
                 }
 
+                if (m_queLog.Count >= m_maxQueueSize)
+                {
+                    Interlocked.Increment(ref m_droppedLogCount);
+                    return;
+                }
+
                 m_queLog.Enqueue(data);
             }
 
@@ -560,6 +615,9 @@ namespace LogHandler
 
             Debug.WriteLine(
                 "LogWriteProcess exit!!");
+
+            if (Volatile.Read(ref m_disposeState) != 0)
+                DisposeLogEvent();
         }
 
         private void DrainQueue()

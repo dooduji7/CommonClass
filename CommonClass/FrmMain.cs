@@ -1,4 +1,5 @@
 ﻿using AsyncSocket;
+using CommonClass.Worker;
 using DBHandler;
 using LogHandler;
 using SerialHandler;
@@ -65,6 +66,16 @@ namespace CommonClass
         private Thread socketClientEchoThread;
         private volatile bool socketClientEchoStop;
 
+        // JobHandler
+        private JobManager jobManager;
+        private ComboBox cboJobName;
+        private NumericUpDown nudJobInterval;
+        private DataGridView dgvJobStatus;
+        private TextBox txtJobLog;
+        private System.Windows.Forms.Timer jobStatusTimer;
+        private int jobACount;
+        private int jobErrorCount;
+
         #endregion
 
         public FrmMain()
@@ -112,6 +123,7 @@ namespace CommonClass
             tabMain.TabPages.Add(BuildLogHandlerTab());
             tabMain.TabPages.Add(BuildSerialHandlerTab());
             tabMain.TabPages.Add(BuildSocketClientTab());
+            tabMain.TabPages.Add(BuildJobHandlerTab());
 
             Panel bottomPanel = new Panel
             {
@@ -354,6 +366,90 @@ namespace CommonClass
             page.Controls.Add(txtSocketClientLog);
             page.Controls.Add(top);
 
+            return page;
+        }
+
+        private TabPage BuildJobHandlerTab()
+        {
+            TabPage page = new TabPage("JobHandler");
+            FlowLayoutPanel top = CreateTopPanel();
+            top.Height = 105;
+            top.WrapContents = true;
+
+            cboJobName = new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                Width = 120
+            };
+            cboJobName.Items.AddRange(new object[] { "JOB_A", "JOB_ERROR" });
+            cboJobName.SelectedIndex = 0;
+
+            nudJobInterval = new NumericUpDown
+            {
+                Minimum = 1,
+                Maximum = 600000,
+                Value = 1000,
+                Width = 90
+            };
+
+            top.Controls.Add(CreateLabel("Job"));
+            top.Controls.Add(cboJobName);
+            top.Controls.Add(CreateLabel("Interval(ms)"));
+            top.Controls.Add(nudJobInterval);
+            top.Controls.Add(CreateButton("Register", BtnJobRegister_Click));
+            top.Controls.Add(CreateButton("Start", BtnJobStart_Click));
+            top.Controls.Add(CreateButton("Stop", BtnJobStop_Click));
+            top.Controls.Add(CreateButton("Restart", BtnJobRestart_Click));
+            top.Controls.Add(CreateButton("Remove", BtnJobRemove_Click));
+            top.Controls.Add(CreateButton("Start All", BtnJobStartAll_Click));
+            top.Controls.Add(CreateButton("Stop All", BtnJobStopAll_Click));
+            top.Controls.Add(CreateButton("Refresh", BtnJobRefresh_Click));
+
+            dgvJobStatus = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AllowUserToResizeRows = false,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                RowHeadersVisible = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect
+            };
+            dgvJobStatus.Columns.Add("Name", "Name");
+            dgvJobStatus.Columns.Add("State", "State");
+            dgvJobStatus.Columns.Add("Executing", "Executing");
+            dgvJobStatus.Columns.Add("Interval", "Interval(ms)");
+            dgvJobStatus.Columns.Add("RunCount", "RunCount");
+            dgvJobStatus.Columns.Add("ErrorCount", "ErrorCount");
+            dgvJobStatus.Columns.Add("LastStart", "LastStart");
+            dgvJobStatus.Columns.Add("LastDuration", "LastDuration(ms)");
+            dgvJobStatus.Columns.Add("LastError", "LastError");
+
+            txtJobLog = CreateLogTextBox();
+
+            SplitContainer split = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Horizontal,
+                SplitterDistance = 330
+            };
+            split.Panel1.Controls.Add(dgvJobStatus);
+            split.Panel2.Controls.Add(txtJobLog);
+
+            page.Controls.Add(split);
+            page.Controls.Add(top);
+
+            jobManager = new JobManager();
+            jobManager.JobStateChanged += JobManager_JobStateChanged;
+            jobManager.JobError += JobManager_JobError;
+
+            jobStatusTimer = new System.Windows.Forms.Timer();
+            jobStatusTimer.Interval = 500;
+            jobStatusTimer.Tick += (sender, e) => RefreshJobStatus();
+            jobStatusTimer.Start();
+
+            AppendJob("Register -> Start 순서로 테스트하세요. JOB_ERROR는 3회마다 예외를 발생시킵니다.");
             return page;
         }
 
@@ -1153,6 +1249,176 @@ namespace CommonClass
 
         #endregion
 
+        #region JobHandler Test
+
+        private string SelectedJobName
+        {
+            get { return Convert.ToString(cboJobName.SelectedItem); }
+        }
+
+        private void BtnJobRegister_Click(object sender, EventArgs e)
+        {
+            string name = SelectedJobName;
+
+            try
+            {
+                Action action = string.Equals(name, "JOB_ERROR", StringComparison.OrdinalIgnoreCase)
+                    ? new Action(JobErrorWork)
+                    : new Action(JobAWork);
+
+                jobManager.Register(name, action, (int)nudJobInterval.Value);
+                AppendJob("Registered: " + name);
+                RefreshJobStatus();
+            }
+            catch (Exception ex)
+            {
+                AppendJob("Register failed: " + ex.Message);
+            }
+        }
+
+        private void BtnJobStart_Click(object sender, EventArgs e)
+        {
+            ExecuteJobCommand("Start", () => jobManager.Start(SelectedJobName));
+        }
+
+        private void BtnJobStop_Click(object sender, EventArgs e)
+        {
+            ExecuteJobCommand("Stop", () => jobManager.Stop(SelectedJobName, 3000));
+        }
+
+        private void BtnJobRestart_Click(object sender, EventArgs e)
+        {
+            ExecuteJobCommand("Restart", () => jobManager.Restart(SelectedJobName, 3000));
+        }
+
+        private void BtnJobRemove_Click(object sender, EventArgs e)
+        {
+            ExecuteJobCommand("Remove", () => jobManager.Remove(SelectedJobName, 3000));
+        }
+
+        private void BtnJobStartAll_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                jobManager.StartAll();
+                AppendJob("StartAll requested.");
+            }
+            catch (Exception ex)
+            {
+                AppendJob("StartAll failed: " + ex.Message);
+            }
+
+            RefreshJobStatus();
+        }
+
+        private void BtnJobStopAll_Click(object sender, EventArgs e)
+        {
+            ExecuteJobCommand("StopAll", () => jobManager.StopAll(3000));
+        }
+
+        private void BtnJobRefresh_Click(object sender, EventArgs e)
+        {
+            RefreshJobStatus();
+        }
+
+        private void ExecuteJobCommand(string command, Func<bool> action)
+        {
+            try
+            {
+                bool result = action();
+                AppendJob(command + " result=" + result);
+            }
+            catch (Exception ex)
+            {
+                AppendJob(command + " failed: " + ex.Message);
+            }
+
+            RefreshJobStatus();
+        }
+
+        private void JobAWork()
+        {
+            int count = Interlocked.Increment(ref jobACount);
+            AppendJob("JOB_A executed. Count=" + count);
+        }
+
+        private void JobErrorWork()
+        {
+            int count = Interlocked.Increment(ref jobErrorCount);
+            AppendJob("JOB_ERROR executed. Count=" + count);
+
+            if (count % 3 == 0)
+                throw new InvalidOperationException("Expected test exception. Count=" + count);
+        }
+
+        private void JobManager_JobStateChanged(object sender, JobStateChangedEventArgs e)
+        {
+            AppendJob(e.JobName + ": " + e.PreviousState + " -> " + e.State);
+            RequestJobStatusRefresh();
+        }
+
+        private void JobManager_JobError(object sender, JobErrorEventArgs e)
+        {
+            AppendJob("ERROR " + e.JobName + ": " + e.Exception.Message);
+            RequestJobStatusRefresh();
+        }
+
+        private void RequestJobStatusRefresh()
+        {
+            if (IsDisposed || Disposing)
+                return;
+
+            try
+            {
+                if (InvokeRequired)
+                    BeginInvoke(new Action(RefreshJobStatus));
+                else
+                    RefreshJobStatus();
+            }
+            catch
+            {
+            }
+        }
+
+        private void RefreshJobStatus()
+        {
+            if (dgvJobStatus == null || dgvJobStatus.IsDisposed || jobManager == null)
+                return;
+
+            try
+            {
+                dgvJobStatus.Rows.Clear();
+
+                foreach (JobStatus status in jobManager.GetAllStatus())
+                {
+                    dgvJobStatus.Rows.Add(
+                        status.Name,
+                        status.State,
+                        status.IsExecuting,
+                        status.Interval.TotalMilliseconds.ToString("0"),
+                        status.RunCount,
+                        status.ErrorCount,
+                        FormatJobDateTime(status.LastStartTime),
+                        status.LastExecutionTime.HasValue
+                            ? status.LastExecutionTime.Value.TotalMilliseconds.ToString("0.0")
+                            : string.Empty,
+                        status.LastException == null
+                            ? string.Empty
+                            : status.LastException.Message);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
+        private static string FormatJobDateTime(DateTime? value)
+        {
+            return value.HasValue ? value.Value.ToString("HH:mm:ss.fff") : string.Empty;
+        }
+
+        #endregion
+
         #region Logging Helpers
 
         private void AppendAsync(string text)
@@ -1178,6 +1444,11 @@ namespace CommonClass
         private void AppendSocketClient(string text)
         {
             AppendTextSafe(txtSocketClientLog, "SocketClient", text);
+        }
+
+        private void AppendJob(string text)
+        {
+            AppendTextSafe(txtJobLog, "JobHandler", text);
         }
 
         private void AppendCommon(string text)
@@ -1246,6 +1517,19 @@ namespace CommonClass
 
         private void FrmMain_FormClosing(object sender, FormClosingEventArgs e)
         {
+            if (jobStatusTimer != null)
+            {
+                jobStatusTimer.Stop();
+                jobStatusTimer.Dispose();
+                jobStatusTimer = null;
+            }
+
+            if (jobManager != null)
+            {
+                jobManager.Dispose();
+                jobManager = null;
+            }
+
             StopAsyncSocketTest();
             CloseSerial();
             CloseSocketClient();

@@ -38,7 +38,7 @@ namespace DBHandler
         /// <summary>
         /// 완성차 ConnectionString 입니다.
         /// </summary>
-        public static string strConnectionString = "user id= " + m_User + ";data source= " + m_Alias + ";password= " + m_Pass + ";Connection Lifetime=300; Max Pool Size = 3";
+        private static string strConnectionString = "user id= " + m_User + ";data source= " + m_Alias + ";password= " + m_Pass + ";Connection Lifetime=300; Max Pool Size = 3";
         //public static string m_strConnectingString;
 
 
