@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.11.35312.102
+# Visual Studio Version 18
+VisualStudioVersion = 18.7.12002.237
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommonClass", "CommonClass\CommonClass.csproj", "{4406928A-3188-4FD4-9E6E-CA5ABCE4ADB4}"
 EndProject
@@ -16,6 +16,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AsyncSocket", "AsyncSocket\AsyncSocket.csproj", "{FBEF0024-C416-41D6-8D39-103EE7D094DC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JobHandler", "JobHandler\JobHandler.csproj", "{4F387E6B-244E-46A1-99E0-E0DC8B041B1D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZebraPrinter", "ZebraPrinter\ZebraPrinter.csproj", "{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ToolHandler", "ToolHandler\ToolHandler.csproj", "{3479890C-3A66-4967-88AA-1B2E37CA3BFE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -111,6 +115,30 @@ Global
 		{4F387E6B-244E-46A1-99E0-E0DC8B041B1D}.Release|x64.Build.0 = Release|Any CPU
 		{4F387E6B-244E-46A1-99E0-E0DC8B041B1D}.Release|x86.ActiveCfg = Release|Any CPU
 		{4F387E6B-244E-46A1-99E0-E0DC8B041B1D}.Release|x86.Build.0 = Release|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Debug|x64.Build.0 = Debug|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Debug|x86.Build.0 = Debug|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Release|x64.ActiveCfg = Release|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Release|x64.Build.0 = Release|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Release|x86.ActiveCfg = Release|Any CPU
+		{1FDF80A2-3CF4-4F46-A8C7-1AA787496DF5}.Release|x86.Build.0 = Release|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Debug|x64.Build.0 = Debug|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Debug|x86.Build.0 = Debug|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Release|x64.ActiveCfg = Release|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Release|x64.Build.0 = Release|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Release|x86.ActiveCfg = Release|Any CPU
+		{3479890C-3A66-4967-88AA-1B2E37CA3BFE}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
